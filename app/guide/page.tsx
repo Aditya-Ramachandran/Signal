@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import SignalFooter from '../components/SignalFooter';
+import MobileDesktopNote from '../components/MobileDesktopNote';
 
 const repositoryUrl = 'https://github.com/Aditya-Ramachandran/Signal';
 
@@ -21,6 +22,7 @@ export default function GuidePage() {
 
   return <main className="guide-shell">
     <GuideHeader theme={theme} onTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}/>
+    <MobileDesktopNote/>
     <section className="guide-intro"><div><h1>Set up your<br/>morning signal.</h1><p>About twenty minutes, one private pipeline, and tomorrow’s job search starts with a short queue instead of a dozen tabs.</p><div className="guide-actions"><Link className="btn primary" href="/welcome">Sign in to Signal</Link><a className="btn" href={repositoryUrl} target="_blank" rel="noreferrer">Open GitHub ↗</a></div></div><aside><strong>✨ What you’ll end up with</strong><p>Fresh backend roles in your own Sheet, a private read-only feed, and a Signal workspace that belongs to your Google account.</p><ul><li>☕ A calmer first tab every morning</li><li>🎯 Fewer roles, stronger next moves</li><li>✉️ Referral notes when they matter</li></ul><span>No secrets live in Signal.</span></aside></section>
 
     <div className="guide-quickstart"><strong>🧰 Before you begin</strong><span>A Google account, a GitHub account, an OpenAI API key with credit, and about 20 minutes. You do not need to give Signal access to your Gmail or Sheet.</span></div>

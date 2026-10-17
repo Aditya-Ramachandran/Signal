@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import SignalFooter from '../components/SignalFooter';
+import MobileDesktopNote from '../components/MobileDesktopNote';
 
 type Screen = 'home' | 'sign-in' | 'setup';
 type AuthState = 'checking' | 'signed-out' | 'allowed' | 'denied' | 'error';
@@ -75,6 +76,7 @@ export default function Welcome() {
 
   return <main className="welcome-shell">
     <Header theme={theme} onTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')} onHome={goHome}/>
+    <MobileDesktopNote/>
     {authState === 'allowed' ? (screen === 'setup' ? <SetupScreen step={setupStep} roles={roles} locations={locations} endpoint={endpoint} endpointLooksValid={endpointLooksValid} notice={notice} onRoles={setRoles} onLocations={setLocations} onEndpoint={(value) => { setEndpoint(value); setNotice(''); }} onNext={() => { if (setupStep === 2 && !endpointLooksValid) { setNotice('Paste the public read-only URL from your Apps Script bridge to continue.'); return; } setNotice(''); setSetupStep(Math.min(setupStep + 1, 3)); }} onBack={() => setupStep === 1 ? setScreen('home') : setSetupStep(setupStep - 1)} onFinish={finishSetup} /> : <SignedInScreen email={accountEmail} onOpen={openWorkspace} onSetup={() => { setNotice(''); setSetupStep(1); setScreen('setup'); }} onSignOut={signOut}/>) : authState === 'denied' ? <DeniedScreen email={accountEmail} state={waitlistState} onJoin={joinWaitlist} onSignOut={signOut}/> : <>{screen === 'home' && <HomeScreen onSignIn={() => setScreen('sign-in')}/>} {screen === 'sign-in' && <SignInScreen notice={notice} configured={isSupabaseConfigured} onGoogle={signIn} onPreview={() => { setNotice(''); setScreen('setup'); }}/>} {screen === 'setup' && <SetupScreen step={setupStep} roles={roles} locations={locations} endpoint={endpoint} endpointLooksValid={endpointLooksValid} notice={notice} onRoles={setRoles} onLocations={setLocations} onEndpoint={(value) => { setEndpoint(value); setNotice(''); }} onNext={() => { if (setupStep === 2 && !endpointLooksValid) { setNotice('Paste the public read-only URL from your Apps Script bridge to continue.'); return; } setNotice(''); setSetupStep(Math.min(setupStep + 1, 3)); }} onBack={() => setupStep === 1 ? setScreen('sign-in') : setSetupStep(setupStep - 1)} onFinish={() => setNotice('Setup preview complete. Sign in with Google after Supabase is connected to save this workspace.')} />}</>}
     <SignalFooter/>
   </main>;
