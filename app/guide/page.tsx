@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import SignalFooter from '../components/SignalFooter';
 
 const repositoryUrl = 'https://github.com/Aditya-Ramachandran/Signal';
 
@@ -58,5 +59,6 @@ export default function GuidePage() {
     <section className="guide-finish"><div><h2>That’s the loop.</h2><p>Read the lead role, copy the note, apply, and keep your next move visible. Outreach stays optional until you decide to add that task to your own pipeline.</p></div><Link className="btn primary" href="/welcome">Open Signal</Link></section>
 
     <section className="guide-troubleshooting"><h2>Small bumps, quick fixes.</h2><details><summary>The queue says it cannot load jobs.</summary><p>Confirm your Apps Script deployment is the latest version, the URL ends in <code>/exec</code>, and its read endpoint returns jobs. Then reopen Signal or use Refresh queue.</p></details><details><summary>I see an empty workspace after signing in.</summary><p>Use Connect jobs feed and save your own read-only URL. Each Google account has a separate Signal workspace.</p></details><details><summary>Google sign-in says access needs approval.</summary><p>Join the waitlist or ask the Signal owner to add that exact Google email to the approved-user list, then sign in again.</p></details><details><summary>My pipeline found no jobs.</summary><p>Run the workflow again later or tune the role, location, and experience rules in <code>daily_jobs.py</code>. Portal rate limits can also temporarily reduce results.</p></details></section>
+    <SignalFooter/>
   </main>;
 }
