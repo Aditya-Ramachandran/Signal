@@ -103,6 +103,7 @@ h2 { font-size:22px; letter-spacing:-.035em; margin:0; font-weight:600; }
 .job-detail .actions { margin-top:14px; }
 .status-select { border:1px solid var(--line); background:var(--paper); color:var(--ink); padding:9px 11px; border-radius:7px; font-size:14px; }
 .empty { color:var(--muted); padding:55px 4px; font-size:19px; }
+.workspace-empty { display:flex; align-items:flex-end; justify-content:space-between; gap:28px; min-height:260px; margin-top:34px; padding:30px; border-top:2px solid var(--accent); background:var(--surface); }.workspace-empty h2 { font-size:clamp(28px,3vw,40px); }.workspace-empty p { max-width:500px; margin:13px 0 0; color:var(--muted); font-size:16px; line-height:1.45; }.workspace-empty .btn { flex:0 0 auto; text-align:center; }
 .outreach-list { border-top:1px solid var(--line); }
 .contact { display:grid; grid-template-columns:1.05fr .9fr 1.5fr auto; gap:28px; padding:23px 4px; border-bottom:1px solid var(--line); align-items:start; }
 .contact-name { font-size:19px; }
@@ -139,6 +140,7 @@ h2 { font-size:22px; letter-spacing:-.035em; margin:0; font-weight:600; }
   .filters { overflow:visible; flex-wrap:wrap; margin-top:16px; padding-bottom:0; }
   .filter { white-space:nowrap; }
   .lead { display:block; padding:25px 21px; }
+  .workspace-empty { display:block; min-height:0; margin-top:27px; padding:24px 21px; }.workspace-empty .btn { display:inline-block; margin-top:23px; }
   .lead h2 { font-size:clamp(38px,12vw,60px); }
   .lead-why { padding:16px; margin-top:25px; }
   .message { margin-top:27px; padding-top:22px; }
