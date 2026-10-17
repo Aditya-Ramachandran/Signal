@@ -6,6 +6,67 @@ import { jobs as initialJobs, outreachContacts, type Job } from '../lib/sampleDa
 
 type Filter = 'All' | 'A' | 'B' | 'Applied' | 'Referred';
 type View = 'today' | 'outreach';
+type BridgeResponse = { ok?: boolean; jobs?: Record<string, unknown>[]; error?: string };
+
+const liveJobsUrl = process.env.NEXT_PUBLIC_SIGNAL_JOBS_URL;
+
+function stringValue(value: unknown, fallback = '') {
+  return typeof value === 'string' || typeof value === 'number' ? String(value).trim() || fallback : fallback;
+}
+
+function field(row: Record<string, unknown>, ...names: string[]) {
+  const match = Object.entries(row).find(([key]) => names.some((name) => key.toLowerCase() === name.toLowerCase()));
+  return match ? stringValue(match[1]) : '';
+}
+
+function formatDate(value: string) {
+  const date = new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(date);
+}
+
+function daysAgo(value: string) {
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return 0;
+  return Math.max(0, Math.round((Date.now() - date.getTime()) / 86_400_000));
+}
+
+function jobsFromBridge(payload: BridgeResponse): Job[] {
+  if (!payload.ok || !Array.isArray(payload.jobs)) return [];
+
+  return payload.jobs.map((row, index) => {
+    const company = field(row, 'Company', 'company') || 'Unknown company';
+    const role = field(row, 'Role', 'role') || 'Backend role';
+    const postedDate = field(row, 'Posted', 'Posted Date', 'postedDate');
+    const dateFound = field(row, 'Date Found', 'dateFound') || postedDate;
+    const rawStatus = field(row, 'Status', 'status');
+    const status: Job['status'] = ['New', 'Applied', 'Referred', 'Rejected'].includes(rawStatus) ? rawStatus as Job['status'] : 'New';
+    const tier: Job['tier'] = field(row, 'Tier', 'tier').toUpperCase() === 'A' ? 'A' : 'B';
+    const jobId = field(row, 'Job ID', 'jobId') || `live-${index + 1}`;
+    const applyLink = field(row, 'Link', 'Apply Link', 'applyLink');
+    const findContactsLink = field(row, 'Find Contacts Link', 'findContactsLink') || `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(`${company} ${role}`)}`;
+
+    return {
+      id: jobId,
+      company,
+      role,
+      location: field(row, 'Location', 'location') || 'Location not stated',
+      companySize: field(row, 'Company Size', 'companySize') || 'Unknown',
+      postedDate: formatDate(postedDate),
+      postedDaysAgo: daysAgo(postedDate),
+      experience: field(row, 'Experience', 'experience') || 'Not stated',
+      salary: field(row, 'Salary (source)', 'Salary', 'salary') || 'Not disclosed',
+      applyLink: applyLink || '#',
+      jobId,
+      idType: field(row, 'ID Type', 'idType') || 'portal',
+      tier,
+      status,
+      whyFit: field(row, 'Why it fits', 'Why Fit', 'whyFit') || 'Relevant backend opening from your daily search.',
+      referralMessage: field(row, 'Referral Message', 'referralMessage') || `Hi — I’m interested in the ${role} role at ${company}. Would you be open to pointing me to the right hiring contact?`,
+      findContactsLink,
+      dateFound: formatDate(dateFound),
+    };
+  }).sort((a, b) => a.tier.localeCompare(b.tier) || a.postedDaysAgo - b.postedDaysAgo);
+}
 
 function SunIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42"/></svg>; }
 function MoonIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.7A8.5 8.5 0 0 1 9.3 3.5 8.5 8.5 0 1 0 20.5 14.7Z"/></svg>; }
@@ -14,23 +75,47 @@ export default function Home() {
   const [activeView, setActiveView] = useState<View>('today');
   const [filter, setFilter] = useState<Filter>('All');
   const [jobState, setJobState] = useState<Job[]>(initialJobs);
+  const [isLoadingJobs, setIsLoadingJobs] = useState(Boolean(liveJobsUrl));
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [toast, setToast] = useState('');
   const reducedMotion = useReducedMotion();
-  const briefingDate = '17 Oct 2026';
+  const briefingDate = jobState[0]?.dateFound || '17 Oct 2026';
   const lastRun = '08:12';
 
   useEffect(() => { const saved = window.localStorage.getItem('signal-theme'); if (saved === 'dark') setTheme('dark'); }, []);
   useEffect(() => { document.documentElement.dataset.theme = theme; window.localStorage.setItem('signal-theme', theme); }, [theme]);
   useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => setToast(''), 2200); return () => window.clearTimeout(timer); }, [toast]);
 
+  const loadLiveJobs = async () => {
+    if (!liveJobsUrl) return false;
+    setIsLoadingJobs(true);
+    try {
+      const response = await fetch(liveJobsUrl, { cache: 'no-store' });
+      const payload = await response.json() as BridgeResponse;
+      const liveJobs = jobsFromBridge(payload);
+      if (!response.ok || !liveJobs.length) throw new Error(payload.error || 'No jobs returned');
+      setJobState(liveJobs);
+      return true;
+    } catch {
+      setToast('Live jobs unavailable — showing the saved sample queue');
+      return false;
+    } finally {
+      setIsLoadingJobs(false);
+    }
+  };
+
+  useEffect(() => { void loadLiveJobs(); }, []); // The URL is injected at build time for the static export.
+
   const filteredJobs = useMemo(() => jobState.filter((job) => filter === 'All' || (filter === 'A' && job.tier === 'A') || (filter === 'B' && job.tier === 'B') || job.status === filter), [filter, jobState]);
   const lead = filteredJobs[0];
   const queuedJobs = lead ? filteredJobs.filter((job) => job.id !== lead.id) : [];
   const setStatus = (id: string, status: Job['status']) => { setJobState((items) => items.map((job) => job.id === id ? { ...job, status } : job)); setToast(`Status updated to ${status}`); };
   const copy = async (text: string) => { try { await navigator.clipboard.writeText(text); setToast('Copied to clipboard'); } catch { setToast('Copy unavailable — select the text manually'); } };
-  const refresh = () => setToast('Sample queue refreshed locally');
+  const refresh = async () => {
+    if (await loadLiveJobs()) setToast('Queue refreshed from your tracker');
+    else if (!liveJobsUrl) setToast('Add NEXT_PUBLIC_SIGNAL_JOBS_URL to load your tracker');
+  };
   const motionProps = reducedMotion ? {} : { initial: { opacity: 0, y: 14 }, animate: { opacity: 1, y: 0 }, transition: { duration: .45, ease: 'easeOut' as const } };
 
   return <main className="shell">
@@ -40,7 +125,7 @@ export default function Home() {
     </header>
 
     <motion.section className="stats" aria-label="Queue summary" {...(reducedMotion ? {} : { initial: { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0 }, transition: { delay: .08, duration: .4 } })}>
-      <Stat value={String(jobState.filter((job) => job.dateFound === briefingDate).length)} label="new today"/><Stat value={String(jobState.filter((job) => job.tier === 'A').length)} label="Tier A roles"/><Stat value={lastRun} label="sample run, IST"/>
+      <Stat value={String(jobState.filter((job) => job.dateFound === briefingDate).length)} label="new today"/><Stat value={String(jobState.filter((job) => job.tier === 'A').length)} label="Tier A roles"/><Stat value={isLoadingJobs ? '…' : lastRun} label={isLoadingJobs ? 'loading tracker' : 'last run, IST'}/>
     </motion.section>
 
     <nav className="view-tabs" aria-label="Views">{(['today', 'outreach'] as View[]).map((view) => <button key={view} className={`view-tab ${activeView === view ? 'active' : ''}`} onClick={() => setActiveView(view)}>{view === 'today' ? 'Today' : 'Outreach'}</button>)}</nav>
