@@ -4,11 +4,12 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import SignalFooter from '../components/SignalFooter';
 import MobileDesktopNote from '../components/MobileDesktopNote';
+import SignalMark from '../components/SignalMark';
 
 const repositoryUrl = 'https://github.com/Aditya-Ramachandran/Signal';
 
 function GuideHeader({ theme, onTheme }: { theme: 'light' | 'dark'; onTheme: () => void }) {
-  return <header className="guide-header"><Link className="brand" href="/welcome"><span className="mark" aria-hidden="true"/><span className="guide-brand-copy"><span className="wordmark">Signal</span><span className="tagline">Less noise. More signal.</span></span></Link><nav><Link href="/welcome">Welcome</Link><Link href="/?demo=1">Try the demo</Link><button className="theme-toggle" aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} onClick={onTheme}><span aria-hidden="true">{theme === 'dark' ? '☀️' : '🌙'}</span></button></nav></header>;
+  return <header className="guide-header"><Link className="brand" href="/welcome"><SignalMark/><span className="guide-brand-copy"><span className="wordmark">Signal</span><span className="tagline">Less noise. More signal.</span></span></Link><nav><Link href="/welcome">Welcome</Link><Link href="/?demo=1">Try the demo</Link><button className="theme-toggle" aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} onClick={onTheme}><span aria-hidden="true">{theme === 'dark' ? '☀️' : '🌙'}</span></button></nav></header>;
 }
 
 function Step({ number, emoji, title, children }: { number: string; emoji: string; title: string; children: React.ReactNode }) {

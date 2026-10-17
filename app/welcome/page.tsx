@@ -6,6 +6,7 @@ import type { Session } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import SignalFooter from '../components/SignalFooter';
 import MobileDesktopNote from '../components/MobileDesktopNote';
+import SignalMark from '../components/SignalMark';
 
 type Screen = 'home' | 'sign-in' | 'setup';
 type AuthState = 'checking' | 'signed-out' | 'allowed' | 'denied' | 'error';
@@ -14,7 +15,7 @@ type WaitlistState = 'idle' | 'pending' | 'submitting' | 'error';
 function GoogleIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.6 12.23c0-.71-.06-1.39-.18-2.05H12v3.88h5.38a4.6 4.6 0 0 1-2 3.02v2.52h3.24c1.9-1.75 2.98-4.34 2.98-7.37Z"/><path fill="#34A853" d="M12 22c2.7 0 4.96-.9 6.62-2.4l-3.24-2.52c-.9.6-2.05.96-3.38.96-2.6 0-4.8-1.76-5.58-4.12H3.08v2.6A10 10 0 0 0 12 22Z"/><path fill="#FBBC05" d="M6.42 13.92A6.02 6.02 0 0 1 6.1 12c0-.67.12-1.31.32-1.92v-2.6H3.08A10 10 0 0 0 2 12c0 1.61.39 3.14 1.08 4.52l3.34-2.6Z"/><path fill="#EA4335" d="M12 5.96c1.45 0 2.75.5 3.77 1.48l2.82-2.82C16.95 3.1 14.7 2 12 2a10 10 0 0 0-8.92 5.48l3.34 2.6C7.2 7.72 9.4 5.96 12 5.96Z"/></svg>; }
 
 function Header({ theme, onTheme, onHome }: { theme: 'light' | 'dark'; onTheme: () => void; onHome: () => void }) {
-  return <header className="welcome-header"><button className="brand brand-button" onClick={onHome} aria-label="Return to Signal welcome"><span className="mark" aria-hidden="true"/><span><span className="wordmark">Signal</span><span className="tagline">Less noise. More signal.</span></span></button><div className="welcome-header-actions"><button className="theme-toggle" aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} onClick={onTheme}><span aria-hidden="true">{theme === 'dark' ? '☀️' : '🌙'}</span></button><a href="https://github.com/Aditya-Ramachandran/Signal" target="_blank" rel="noreferrer">View on GitHub ↗</a></div></header>;
+  return <header className="welcome-header"><button className="brand brand-button" onClick={onHome} aria-label="Return to Signal welcome"><SignalMark/><span><span className="wordmark">Signal</span><span className="tagline">Less noise. More signal.</span></span></button><div className="welcome-header-actions"><button className="theme-toggle" aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} onClick={onTheme}><span aria-hidden="true">{theme === 'dark' ? '☀️' : '🌙'}</span></button><a href="https://github.com/Aditya-Ramachandran/Signal" target="_blank" rel="noreferrer">View on GitHub ↗</a></div></header>;
 }
 
 export default function Welcome() {
