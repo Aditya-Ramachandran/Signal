@@ -22,6 +22,7 @@ function readJson<T>(key: string, fallback: T): T {
   try { const value = window.localStorage.getItem(key); return value ? JSON.parse(value) as T : fallback; } catch { return fallback; }
 }
 function withSavedStatuses(items: Job[], statuses = readJson<StoredStatuses>(STATUS_STORAGE_KEY, {})) { return items.map((job) => statuses[job.id] ? { ...job, status: statuses[job.id] } : job); }
+function isAccountRoute() { return typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('app'); }
 function stringValue(value: unknown, fallback = '') { return typeof value === 'string' || typeof value === 'number' ? String(value).trim() || fallback : fallback; }
 function field(row: Record<string, unknown>, ...names: string[]) { const match = Object.entries(row).find(([key]) => names.some((name) => key.toLowerCase() === name.toLowerCase())); return match ? stringValue(match[1]) : ''; }
 function formatDate(value: string) { const date = new Date(`${value}T00:00:00`); return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(date); }
@@ -66,7 +67,16 @@ export default function Home() {
   const [showDashboard, setShowDashboard] = useState(false);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    setShowDashboard(params.has('demo') || params.has('app'));
+    if (params.has('demo')) { setShowDashboard(true); return; }
+    if (!params.has('app') || !supabase) return;
+    const client = supabase;
+    const openWorkspace = async () => {
+      const { data: { user } } = await client.auth.getUser();
+      if (!user?.email) return;
+      const { data } = await client.from('allowed_users').select('email').eq('email', user.email.toLowerCase()).maybeSingle();
+      setShowDashboard(Boolean(data));
+    };
+    void openWorkspace();
   }, []);
   return showDashboard ? <Dashboard /> : <Welcome />;
 }
@@ -97,9 +107,9 @@ function Dashboard() {
   useEffect(() => { setIsGuestDemo(new URLSearchParams(window.location.search).has('demo')); setLeadMessageOpen(!Boolean(window.localStorage.getItem(LEAD_REVIEWED_KEY))); setRouteReady(true); }, []);
   useEffect(() => { window.localStorage.setItem(LEAD_REVIEWED_KEY, 'true'); }, []);
   useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => { setToast(''); setUndoAction(null); }, 5000); return () => window.clearTimeout(timer); }, [toast]);
-  useEffect(() => { const statuses = readJson<StoredStatuses>(STATUS_STORAGE_KEY, {}); setJobState((items) => withSavedStatuses(items, statuses)); setJobMeta(readJson<Record<string, JobMeta>>(META_STORAGE_KEY, {})); setHasRestoredProgress(true); }, []);
-  useEffect(() => { if (hasRestoredProgress) window.localStorage.setItem(STATUS_STORAGE_KEY, JSON.stringify(Object.fromEntries(jobState.map((job) => [job.id, job.status])))); }, [hasRestoredProgress, jobState]);
-  useEffect(() => { if (hasRestoredProgress) window.localStorage.setItem(META_STORAGE_KEY, JSON.stringify(jobMeta)); }, [hasRestoredProgress, jobMeta]);
+  useEffect(() => { if (!isAccountRoute()) { const statuses = readJson<StoredStatuses>(STATUS_STORAGE_KEY, {}); setJobState((items) => withSavedStatuses(items, statuses)); setJobMeta(readJson<Record<string, JobMeta>>(META_STORAGE_KEY, {})); } setHasRestoredProgress(true); }, []);
+  useEffect(() => { if (hasRestoredProgress && !isAccountRoute()) window.localStorage.setItem(STATUS_STORAGE_KEY, JSON.stringify(Object.fromEntries(jobState.map((job) => [job.id, job.status])))); }, [hasRestoredProgress, jobState]);
+  useEffect(() => { if (hasRestoredProgress && !isAccountRoute()) window.localStorage.setItem(META_STORAGE_KEY, JSON.stringify(jobMeta)); }, [hasRestoredProgress, jobMeta]);
   useEffect(() => {
     if (!hasRestoredProgress || !routeReady) return;
     const client = supabase;
@@ -113,8 +123,8 @@ function Dashboard() {
       if (error) { setRemoteProgressReady(true); return; }
       const rows = (data || []) as ProgressRow[];
       const byJob = new Map(rows.map((row) => [row.job_id, row]));
-      setJobState((items) => items.map((job) => { const row = byJob.get(job.id); return row ? { ...job, status: row.status } : job; }));
-      setJobMeta((items) => ({ ...items, ...Object.fromEntries(rows.map((row) => [row.job_id, { saved: row.saved, ...(row.snoozed_until ? { snoozedUntil: row.snoozed_until } : {}) }])) }));
+      setJobState((items) => items.map((job) => { const row = byJob.get(job.id); return { ...job, status: row ? row.status : 'New' }; }));
+      setJobMeta(Object.fromEntries(rows.map((row) => [row.job_id, { saved: row.saved, ...(row.snoozed_until ? { snoozedUntil: row.snoozed_until } : {}) }])));
       setProgressUserId(user.id);
       setProgressScope('account');
       setRemoteProgressReady(true);
@@ -137,7 +147,7 @@ function Dashboard() {
       const payload = await response.json() as BridgeResponse;
       const liveJobs = jobsFromBridge(payload);
       if (!response.ok || !liveJobs.length) throw new Error(payload.error || 'No jobs returned');
-      setJobState(withSavedStatuses(liveJobs));
+      setJobState(isAccountRoute() ? liveJobs : withSavedStatuses(liveJobs));
       return true;
     } catch { announce('Live jobs unavailable — showing the saved sample queue'); return false; } finally { setIsLoadingJobs(false); }
   };
