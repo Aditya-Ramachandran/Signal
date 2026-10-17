@@ -36,6 +36,10 @@ jobs:
         env:
           # Public read-only Apps Script endpoint. This is a repository variable, never a secret.
           NEXT_PUBLIC_SIGNAL_JOBS_URL: ${{ vars.NEXT_PUBLIC_SIGNAL_JOBS_URL }}
+          # Supabase publishable credentials are safe to expose to the browser.
+          # Row Level Security, not key secrecy, protects account data.
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
