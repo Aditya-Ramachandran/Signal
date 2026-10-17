@@ -7,6 +7,7 @@ import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 
 type Screen = 'home' | 'sign-in' | 'setup';
 type AuthState = 'checking' | 'signed-out' | 'allowed' | 'denied' | 'error';
+type WaitlistState = 'idle' | 'pending' | 'submitting' | 'error';
 
 function SunIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42"/></svg>; }
 function MoonIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.7A8.5 8.5 0 0 1 9.3 3.5 8.5 8.5 0 1 0 20.5 14.7Z"/></svg>; }
@@ -26,6 +27,8 @@ export default function Welcome() {
   const [endpoint, setEndpoint] = useState('');
   const [authState, setAuthState] = useState<AuthState>('checking');
   const [accountEmail, setAccountEmail] = useState('');
+  const [accountUserId, setAccountUserId] = useState('');
+  const [waitlistState, setWaitlistState] = useState<WaitlistState>('idle');
   const endpointLooksValid = /^https:\/\/.+/.test(endpoint.trim());
 
   useEffect(() => { if (window.localStorage.getItem('signal-theme') === 'dark') setTheme('dark'); }, []);
@@ -34,11 +37,16 @@ export default function Welcome() {
     const client = supabase;
     if (!client) { setAuthState('error'); return; }
     const applySession = async (session: Session | null) => {
-      if (!session?.user.email) { setAccountEmail(''); setAuthState('signed-out'); return; }
+      if (!session?.user.email) { setAccountEmail(''); setAccountUserId(''); setWaitlistState('idle'); setAuthState('signed-out'); return; }
       const email = session.user.email.toLowerCase();
       setAccountEmail(email);
+      setAccountUserId(session.user.id);
       const { data, error } = await client.from('allowed_users').select('email').eq('email', email).maybeSingle();
-      setAuthState(error ? 'error' : data ? 'allowed' : 'denied');
+      if (error) { setAuthState('error'); return; }
+      if (data) { setAuthState('allowed'); return; }
+      const request = await client.from('waitlist_requests').select('user_id').eq('user_id', session.user.id).maybeSingle();
+      setWaitlistState(request.error ? 'error' : request.data ? 'pending' : 'idle');
+      setAuthState('denied');
     };
     void client.auth.getSession().then(({ data }) => applySession(data.session));
     const { data: { subscription } } = client.auth.onAuthStateChange((_event, session) => { void applySession(session); });
@@ -51,12 +59,18 @@ export default function Welcome() {
     const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: `${window.location.origin}${basePath}` } });
     if (error) setNotice(`Could not start Google sign-in: ${error.message}`);
   };
-  const signOut = async () => { await supabase?.auth.signOut(); setAccountEmail(''); setAuthState('signed-out'); goHome(); };
+  const signOut = async () => { await supabase?.auth.signOut(); setAccountEmail(''); setAccountUserId(''); setWaitlistState('idle'); setAuthState('signed-out'); goHome(); };
   const openWorkspace = () => { const basePath = window.location.hostname.endsWith('github.io') ? '/Signal/' : '/'; window.location.assign(`${basePath}?app=1`); };
+  const joinWaitlist = async () => {
+    if (!supabase || !accountUserId || !accountEmail) return;
+    setWaitlistState('submitting');
+    const { error } = await supabase.from('waitlist_requests').insert({ user_id: accountUserId, email: accountEmail });
+    setWaitlistState(error ? 'error' : 'pending');
+  };
 
   return <main className="welcome-shell">
     <Header theme={theme} onTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')} onHome={goHome}/>
-    {authState === 'allowed' ? <SignedInScreen email={accountEmail} onOpen={openWorkspace} onSignOut={signOut}/> : authState === 'denied' ? <DeniedScreen email={accountEmail} onSignOut={signOut}/> : <>{screen === 'home' && <HomeScreen onSignIn={() => setScreen('sign-in')}/>} {screen === 'sign-in' && <SignInScreen notice={notice} configured={isSupabaseConfigured} onGoogle={signIn} onPreview={() => { setNotice(''); setScreen('setup'); }}/>} {screen === 'setup' && <SetupScreen step={setupStep} roles={roles} locations={locations} endpoint={endpoint} endpointLooksValid={endpointLooksValid} notice={notice} onRoles={setRoles} onLocations={setLocations} onEndpoint={(value) => { setEndpoint(value); setNotice(''); }} onNext={() => { if (setupStep === 2 && !endpointLooksValid) { setNotice('Paste the public read-only URL from your Apps Script bridge to continue.'); return; } setNotice(''); setSetupStep(Math.min(setupStep + 1, 3)); }} onBack={() => setupStep === 1 ? setScreen('sign-in') : setSetupStep(setupStep - 1)} onFinish={() => setNotice('Setup preview complete. Sign in with Google after Supabase is connected to save this workspace.')} />}</>}
+    {authState === 'allowed' ? <SignedInScreen email={accountEmail} onOpen={openWorkspace} onSignOut={signOut}/> : authState === 'denied' ? <DeniedScreen email={accountEmail} state={waitlistState} onJoin={joinWaitlist} onSignOut={signOut}/> : <>{screen === 'home' && <HomeScreen onSignIn={() => setScreen('sign-in')}/>} {screen === 'sign-in' && <SignInScreen notice={notice} configured={isSupabaseConfigured} onGoogle={signIn} onPreview={() => { setNotice(''); setScreen('setup'); }}/>} {screen === 'setup' && <SetupScreen step={setupStep} roles={roles} locations={locations} endpoint={endpoint} endpointLooksValid={endpointLooksValid} notice={notice} onRoles={setRoles} onLocations={setLocations} onEndpoint={(value) => { setEndpoint(value); setNotice(''); }} onNext={() => { if (setupStep === 2 && !endpointLooksValid) { setNotice('Paste the public read-only URL from your Apps Script bridge to continue.'); return; } setNotice(''); setSetupStep(Math.min(setupStep + 1, 3)); }} onBack={() => setupStep === 1 ? setScreen('sign-in') : setSetupStep(setupStep - 1)} onFinish={() => setNotice('Setup preview complete. Sign in with Google after Supabase is connected to save this workspace.')} />}</>}
   </main>;
 }
 
@@ -69,7 +83,7 @@ function SignInScreen({ notice, configured, onGoogle, onPreview }: { notice: str
 }
 
 function SignedInScreen({ email, onOpen, onSignOut }: { email: string; onOpen: () => void; onSignOut: () => void }) { return <section className="account-flow"><div className="account-copy"><h1>Your workspace is ready.</h1><p>You are signed in as {email}. Your Signal preferences and job-search progress will belong only to this account.</p></div><div className="account-panel"><h2>Welcome back</h2><button className="welcome-google google-auth" onClick={onOpen}>Open Signal</button><button className="text-action account-signout" onClick={onSignOut}>Sign out</button></div></section>; }
-function DeniedScreen({ email, onSignOut }: { email: string; onSignOut: () => void }) { return <section className="account-flow"><div className="account-copy"><h1>This workspace is invite-only.</h1><p>{email} signed in successfully, but it is not on Signal’s approved-user list yet.</p></div><div className="account-panel"><h2>Access needs approval</h2><p className="account-help">Ask the Signal owner to add this exact Google email address to the invite list, then try again.</p><button className="text-action account-signout" onClick={onSignOut}>Use another Google account</button></div></section>; }
+function DeniedScreen({ email, state, onJoin, onSignOut }: { email: string; state: WaitlistState; onJoin: () => void; onSignOut: () => void }) { const pending = state === 'pending'; return <section className="account-flow"><div className="account-copy"><h1>{pending ? 'You’re on the early list.' : 'Signal is opening gradually.'}</h1><p>{pending ? <>We’ve saved <strong>{email}</strong> as the Google account to invite.</> : <>You’re signed in as <strong>{email}</strong>. Join the early list and we’ll know which account to approve when Signal opens up.</>}</p></div><div className="account-panel waitlist-panel"><h2>{pending ? 'Request received' : 'Get early access'}</h2><p className="account-help">{pending ? 'Your request is with the Signal owner. This account will work once you’re invited.' : 'No extra form, no password, and no inbox permissions. Just your verified Google account.'}</p>{pending ? <><span className="waitlist-confirmation">On the early list</span><div className="waitlist-demo"><span>Want to see what you’re waiting for?</span><Link className="welcome-guest" href="/?demo=1">Explore the guided demo</Link></div></> : <button className="welcome-google google-auth" onClick={onJoin} disabled={state === 'submitting'}>{state === 'submitting' ? 'Joining…' : 'Join the waitlist'}</button>}{state === 'error' && <p className="welcome-notice" role="status">We couldn’t add you just now. Please try again.</p>}<button className="text-action account-signout" onClick={onSignOut}>Use another Google account</button></div></section>; }
 
 type SetupProps = { step: number; roles: string; locations: string; endpoint: string; endpointLooksValid: boolean; notice: string; onRoles: (value: string) => void; onLocations: (value: string) => void; onEndpoint: (value: string) => void; onNext: () => void; onBack: () => void; onFinish: () => void; };
 function SetupScreen({ step, roles, locations, endpoint, endpointLooksValid, notice, onRoles, onLocations, onEndpoint, onNext, onBack, onFinish }: SetupProps) {
