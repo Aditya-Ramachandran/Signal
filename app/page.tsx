@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from 'framer-motion';
 import { jobs as initialJobs, outreachContacts, type Job } from '../lib/sampleData';
+import Welcome from './welcome/page';
 
 type Filter = 'All' | 'A' | 'B' | 'Applied' | 'Referred';
 type View = 'today' | 'saved' | 'later' | 'outreach';
@@ -60,6 +61,15 @@ function SunIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><circle 
 function MoonIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.7A8.5 8.5 0 0 1 9.3 3.5 8.5 8.5 0 1 0 20.5 14.7Z"/></svg>; }
 
 export default function Home() {
+  const [showDashboard, setShowDashboard] = useState(false);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setShowDashboard(params.has('demo') || params.has('app'));
+  }, []);
+  return showDashboard ? <Dashboard /> : <Welcome />;
+}
+
+function Dashboard() {
   const [activeView, setActiveView] = useState<View>('today');
   const [filter, setFilter] = useState<Filter>('All');
   const [jobState, setJobState] = useState<Job[]>(initialJobs);
