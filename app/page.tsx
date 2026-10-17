@@ -244,7 +244,7 @@ function WorkspaceSetupRequired({ unavailable }: { unavailable: boolean }) {
   const basePath = typeof window !== 'undefined' && window.location.hostname.endsWith('github.io') ? '/Signal/' : '/';
   return <section id="workspace-content" className="workspace-empty">
     <div><h2>{unavailable ? 'Your workspace needs attention.' : 'No jobs feed connected yet.'}</h2><p>{unavailable ? 'We could not read your private workspace settings. Check your Signal setup, then refresh this page.' : 'This Google account has its own private workspace, but no jobs feed has been connected yet.'}</p></div>
-    <div className="workspace-empty-actions"><a className="btn primary" href={`${basePath}?setup=1`}>Connect jobs feed</a><a className="text-action" href="https://github.com/Aditya-Ramachandran/Signal" target="_blank" rel="noreferrer">Read the setup guide ↗</a></div>
+    <div className="workspace-empty-actions"><a className="btn primary" href={`${basePath}?setup=1`}>Connect jobs feed</a><a className="text-action" href={`${basePath}guide`}>Read the setup guide</a></div>
   </section>;
 }
 function QueueSkeleton() { return <section id="workspace-content" className="queue-skeleton" aria-busy="true" aria-label="Loading your job tracker"><div className="skeleton-heading"><span/><span/></div><div className="skeleton-lead"><span/><span/><span/></div><div className="skeleton-row"><span/><span/><span/><span/></div><div className="skeleton-row"><span/><span/><span/><span/></div><div className="skeleton-row"><span/><span/><span/><span/></div></section>; }
