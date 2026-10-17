@@ -239,7 +239,7 @@ function Dashboard() {
 function Stat({ value, label }: { value: string; label: string }) { return <div className="stat"><div className="stat-value mono">{value}</div><div className="stat-label">{label}</div></div>; }
 function WorkspaceSetupRequired({ unavailable }: { unavailable: boolean }) {
   return <section id="workspace-content" className="workspace-empty">
-    <div><h2>{unavailable ? 'Your workspace needs attention.' : 'No jobs connected yet.'}</h2><p>{unavailable ? 'We could not read your private workspace settings. Check your Signal setup, then refresh this page.' : 'This Google account has its own private workspace, but no jobs feed has been connected yet.'}</p></div>
+    <div><h2>{unavailable ? 'Your workspace needs attention.' : 'No jobs feed connected yet.'}</h2><p>{unavailable ? 'We could not read your private workspace settings. Check your Signal setup, then refresh this page.' : 'This Google account has its own private workspace, but no jobs feed has been connected yet.'}</p></div>
     <a className="btn primary" href="https://github.com/Aditya-Ramachandran/Signal" target="_blank" rel="noreferrer">Finish setup in the guide ↗</a>
   </section>;
 }
