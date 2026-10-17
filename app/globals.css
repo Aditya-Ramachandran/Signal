@@ -107,7 +107,7 @@ h2 { font-size:22px; letter-spacing:-.035em; margin:0; font-weight:600; }
 .job-detail .actions { margin-top:14px; }
 .status-select { border:1px solid var(--line); background:var(--paper); color:var(--ink); padding:9px 11px; border-radius:7px; font-size:14px; }
 .empty { color:var(--muted); padding:55px 4px; font-size:19px; }
-.workspace-empty { display:flex; align-items:center; justify-content:space-between; gap:28px; min-height:190px; margin-top:28px; padding:27px 30px; border-top:2px solid var(--accent); background:var(--surface); }.workspace-empty h2 { font-size:clamp(28px,3vw,40px); }.workspace-empty p { max-width:500px; margin:11px 0 0; color:var(--muted); font-size:16px; line-height:1.45; }.workspace-empty .btn { flex:0 0 auto; text-align:center; }
+.workspace-empty { display:flex; align-items:center; justify-content:space-between; gap:28px; min-height:190px; margin-top:28px; padding:27px 30px; border-top:2px solid var(--accent); background:var(--surface); }.workspace-empty h2 { font-size:clamp(28px,3vw,40px); }.workspace-empty p { max-width:500px; margin:11px 0 0; color:var(--muted); font-size:16px; line-height:1.45; }.workspace-empty .btn { flex:0 0 auto; text-align:center; }.workspace-empty-actions { display:grid; justify-items:end; gap:12px; }.workspace-empty-actions .text-action { white-space:nowrap; }
 .outreach-list { border-top:1px solid var(--line); }
 .contact { display:grid; grid-template-columns:1.05fr .9fr 1.5fr auto; gap:28px; padding:23px 4px; border-bottom:1px solid var(--line); align-items:start; }
 .contact-name { font-size:19px; }
