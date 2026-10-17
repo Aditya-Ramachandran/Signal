@@ -11,6 +11,7 @@ type View = 'today' | 'saved' | 'later' | 'outreach';
 type JobMeta = { saved?: boolean; snoozedUntil?: string };
 type StoredStatuses = Record<string, Job['status']>;
 type BridgeResponse = { ok?: boolean; jobs?: Record<string, unknown>[]; error?: string };
+type ProgressRow = { job_id: string; status: Job['status']; saved: boolean; snoozed_until: string | null };
 
 const liveJobsUrl = process.env.NEXT_PUBLIC_SIGNAL_JOBS_URL;
 const STATUS_STORAGE_KEY = 'signal-job-statuses';
@@ -83,18 +84,50 @@ function Dashboard() {
   const [isLoadingJobs, setIsLoadingJobs] = useState(Boolean(liveJobsUrl));
   const [leadMessageOpen, setLeadMessageOpen] = useState(true);
   const [hasRestoredProgress, setHasRestoredProgress] = useState(false);
+  const [routeReady, setRouteReady] = useState(false);
+  const [remoteProgressReady, setRemoteProgressReady] = useState(false);
+  const [progressUserId, setProgressUserId] = useState('');
+  const [progressScope, setProgressScope] = useState<'device' | 'account'>('device');
   const reducedMotion = useReducedMotion();
   const briefingDate = jobState[0]?.dateFound || '17 Oct 2026';
 
   const announce = (message: string, undo?: () => void) => { setToast(message); setUndoAction(() => undo ?? null); };
   useEffect(() => { const saved = window.localStorage.getItem('signal-theme'); if (saved === 'dark') setTheme('dark'); }, []);
   useEffect(() => { document.documentElement.dataset.theme = theme; window.localStorage.setItem('signal-theme', theme); }, [theme]);
-  useEffect(() => { setIsGuestDemo(new URLSearchParams(window.location.search).has('demo')); setLeadMessageOpen(!Boolean(window.localStorage.getItem(LEAD_REVIEWED_KEY))); }, []);
+  useEffect(() => { setIsGuestDemo(new URLSearchParams(window.location.search).has('demo')); setLeadMessageOpen(!Boolean(window.localStorage.getItem(LEAD_REVIEWED_KEY))); setRouteReady(true); }, []);
   useEffect(() => { window.localStorage.setItem(LEAD_REVIEWED_KEY, 'true'); }, []);
   useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => { setToast(''); setUndoAction(null); }, 5000); return () => window.clearTimeout(timer); }, [toast]);
   useEffect(() => { const statuses = readJson<StoredStatuses>(STATUS_STORAGE_KEY, {}); setJobState((items) => withSavedStatuses(items, statuses)); setJobMeta(readJson<Record<string, JobMeta>>(META_STORAGE_KEY, {})); setHasRestoredProgress(true); }, []);
   useEffect(() => { if (hasRestoredProgress) window.localStorage.setItem(STATUS_STORAGE_KEY, JSON.stringify(Object.fromEntries(jobState.map((job) => [job.id, job.status])))); }, [hasRestoredProgress, jobState]);
   useEffect(() => { if (hasRestoredProgress) window.localStorage.setItem(META_STORAGE_KEY, JSON.stringify(jobMeta)); }, [hasRestoredProgress, jobMeta]);
+  useEffect(() => {
+    if (!hasRestoredProgress || !routeReady) return;
+    const client = supabase;
+    if (isGuestDemo || !client) { setRemoteProgressReady(true); return; }
+    let cancelled = false;
+    const restoreAccountProgress = async () => {
+      const { data: { user } } = await client.auth.getUser();
+      if (!user || cancelled) { setRemoteProgressReady(true); return; }
+      const { data, error } = await client.from('job_progress').select('job_id,status,saved,snoozed_until');
+      if (cancelled) return;
+      if (error) { setRemoteProgressReady(true); return; }
+      const rows = (data || []) as ProgressRow[];
+      const byJob = new Map(rows.map((row) => [row.job_id, row]));
+      setJobState((items) => items.map((job) => { const row = byJob.get(job.id); return row ? { ...job, status: row.status } : job; }));
+      setJobMeta((items) => ({ ...items, ...Object.fromEntries(rows.map((row) => [row.job_id, { saved: row.saved, ...(row.snoozed_until ? { snoozedUntil: row.snoozed_until } : {}) }])) }));
+      setProgressUserId(user.id);
+      setProgressScope('account');
+      setRemoteProgressReady(true);
+    };
+    void restoreAccountProgress();
+    return () => { cancelled = true; };
+  }, [hasRestoredProgress, isGuestDemo, routeReady]);
+  useEffect(() => {
+    const client = supabase;
+    if (!hasRestoredProgress || !remoteProgressReady || !progressUserId || isGuestDemo || !client) return;
+    const rows = jobState.map((job) => ({ user_id: progressUserId, job_id: job.id, status: job.status, saved: Boolean(jobMeta[job.id]?.saved), snoozed_until: jobMeta[job.id]?.snoozedUntil || null, updated_at: new Date().toISOString() }));
+    void client.from('job_progress').upsert(rows, { onConflict: 'user_id,job_id' });
+  }, [hasRestoredProgress, isGuestDemo, jobMeta, jobState, progressUserId, remoteProgressReady]);
 
   const loadLiveJobs = async () => {
     if (new URLSearchParams(window.location.search).has('demo') || !liveJobsUrl) return false;
@@ -154,7 +187,7 @@ function Dashboard() {
     {isGuestDemo && <aside className="guest-notice"><div><span className="mono">GUEST DEMO</span><strong>Sample roles, real workflow — nothing is sent.</strong></div><a href="https://github.com/Aditya-Ramachandran/Signal" target="_blank" rel="noreferrer">Liked this? Set up your own Signal ↗</a></aside>}
     <motion.section className="stats" aria-label="Queue summary" {...(reducedMotion ? {} : { initial: { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0 }, transition: { delay: .08, duration: .35 } })}><Stat value={String(newToday.length)} label="new today"/><Stat value={String(todayJobs.filter((job) => job.tier === 'A').length)} label="worth a referral"/><Stat value={isLoadingJobs ? '…' : '08:12'} label={isLoadingJobs ? 'loading tracker' : 'updated, IST'}/></motion.section>
     <div className="workspace-bar"><nav className="view-tabs queue-tabs" aria-label="Job queues"><button className={`view-tab ${activeView === 'today' ? 'active' : ''}`} onClick={() => setActiveView('today')}>Today</button><button className={`view-tab ${activeView === 'saved' ? 'active' : ''}`} onClick={() => setActiveView('saved')}>Saved <span className="tab-count mono">{savedJobs.length}</span></button><button className={`view-tab ${activeView === 'later' ? 'active' : ''}`} onClick={() => setActiveView('later')}>Later <span className="tab-count mono">{laterJobs.length}</span></button></nav><button className={`outreach-launch ${activeView === 'outreach' ? 'active' : ''}`} onClick={() => setActiveView('outreach')}><span>Outreach desk</span><small><b className="mono">{outreachContacts.filter((contact) => contact.emailInferred).length}</b> drafts ready</small></button></div>
-    <AnimatePresence mode="wait">{activeView !== 'outreach' ? <motion.section key={activeView} className="view active" {...motionProps}><div className="section-head"><div><h2>{activeView === 'today' ? 'Morning queue' : activeView === 'saved' ? 'Saved for later' : 'Coming back later'}</h2><p className="queue-progress">{activeView === 'today' ? <><span className="mono">{handledToday}/{newToday.length}</span> new roles actioned today <span className="storage-note">Progress is saved on this device.</span></> : activeView === 'saved' ? 'Roles you deliberately kept for another pass.' : 'Snoozed roles return to Today tomorrow morning.'}</p></div>{activeView === 'today' && <div className="filters" role="tablist" aria-label="Filter jobs">{(['All', 'A', 'B', 'Applied', 'Referred'] as Filter[]).map((item) => <button key={item} className={`filter ${filter === item ? 'active' : ''}`} onClick={() => { setFilter(item); setExpandedId(null); }}>{item === 'A' ? 'Tier A' : item === 'B' ? 'Tier B' : item}{item === 'All' && <span className="mono"> {todayJobs.length}</span>}</button>)}</div>}</div>{lead ? <><LeadJob job={lead} view={activeView} saved={Boolean(jobMeta[lead.id]?.saved)} messageOpen={leadMessageOpen} onReviewMessage={reviewLeadMessage} onCopy={copy} onNeedName={() => announce('Add a contact name before copying')} onStatus={setStatus} onSave={toggleSaved} onSnooze={snooze} onUnsnooze={unsnooze}/><LayoutGroup><div className="job-list">{queuedJobs.map((job) => <JobRow key={job.id} job={job} view={activeView} saved={Boolean(jobMeta[job.id]?.saved)} rank={jobState.indexOf(job) + 1} expanded={expandedId === job.id} onToggle={() => setExpandedId(expandedId === job.id ? null : job.id)} onCopy={copy} onNeedName={() => announce('Add a contact name before copying')} onStatus={setStatus} onSave={toggleSaved} onSnooze={snooze} onUnsnooze={unsnooze} reducedMotion={reducedMotion}/>)}</div></LayoutGroup></> : <div className="empty">{activeView === 'today' ? 'Nothing new today.' : activeView === 'saved' ? 'No saved roles yet.' : 'Nothing is snoozed.'}</div>}</motion.section> : <motion.section key="outreach" className="view active" {...motionProps}><div className="section-head outreach-head"><div><h2>Outreach desk</h2><p className="intro-copy compact">Ready-to-review drafts for people close to your strongest roles. Verify an inferred email, then open Gmail when the note is right.</p></div><button className="back-to-queue" onClick={() => setActiveView('today')}>Back to queue</button></div><div className="outreach-list">{outreachContacts.map((contact) => <OutreachRow key={contact.id} contact={contact} onCopy={copy}/>)}</div></motion.section>}</AnimatePresence>
+    <AnimatePresence mode="wait">{activeView !== 'outreach' ? <motion.section key={activeView} className="view active" {...motionProps}><div className="section-head"><div><h2>{activeView === 'today' ? 'Morning queue' : activeView === 'saved' ? 'Saved for later' : 'Coming back later'}</h2><p className="queue-progress">{activeView === 'today' ? <><span className="mono">{handledToday}/{newToday.length}</span> new roles actioned today <span className="storage-note">{progressScope === 'account' ? 'Progress syncs with your account.' : 'Progress is saved on this device.'}</span></> : activeView === 'saved' ? 'Roles you deliberately kept for another pass.' : 'Snoozed roles return to Today tomorrow morning.'}</p></div>{activeView === 'today' && <div className="filters" role="tablist" aria-label="Filter jobs">{(['All', 'A', 'B', 'Applied', 'Referred'] as Filter[]).map((item) => <button key={item} className={`filter ${filter === item ? 'active' : ''}`} onClick={() => { setFilter(item); setExpandedId(null); }}>{item === 'A' ? 'Tier A' : item === 'B' ? 'Tier B' : item}{item === 'All' && <span className="mono"> {todayJobs.length}</span>}</button>)}</div>}</div>{lead ? <><LeadJob job={lead} view={activeView} saved={Boolean(jobMeta[lead.id]?.saved)} messageOpen={leadMessageOpen} onReviewMessage={reviewLeadMessage} onCopy={copy} onNeedName={() => announce('Add a contact name before copying')} onStatus={setStatus} onSave={toggleSaved} onSnooze={snooze} onUnsnooze={unsnooze}/><LayoutGroup><div className="job-list">{queuedJobs.map((job) => <JobRow key={job.id} job={job} view={activeView} saved={Boolean(jobMeta[job.id]?.saved)} rank={jobState.indexOf(job) + 1} expanded={expandedId === job.id} onToggle={() => setExpandedId(expandedId === job.id ? null : job.id)} onCopy={copy} onNeedName={() => announce('Add a contact name before copying')} onStatus={setStatus} onSave={toggleSaved} onSnooze={snooze} onUnsnooze={unsnooze} reducedMotion={reducedMotion}/>)}</div></LayoutGroup></> : <div className="empty">{activeView === 'today' ? 'Nothing new today.' : activeView === 'saved' ? 'No saved roles yet.' : 'Nothing is snoozed.'}</div>}</motion.section> : <motion.section key="outreach" className="view active" {...motionProps}><div className="section-head outreach-head"><div><h2>Outreach desk</h2><p className="intro-copy compact">Ready-to-review drafts for people close to your strongest roles. Verify an inferred email, then open Gmail when the note is right.</p></div><button className="back-to-queue" onClick={() => setActiveView('today')}>Back to queue</button></div><div className="outreach-list">{outreachContacts.map((contact) => <OutreachRow key={contact.id} contact={contact} onCopy={copy}/>)}</div></motion.section>}</AnimatePresence>
     <div className={`toast ${toast ? 'show' : ''}`} role="status" aria-live="polite"><span>{toast}</span>{undoAction && <button onClick={() => { undoAction(); announce('Change undone'); }}>Undo</button>}</div>
   </main>;
 }
