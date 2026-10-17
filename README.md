@@ -16,6 +16,10 @@
   <a href="https://aditya-ramachandran.github.io/Signal/guide">Set up your own</a>
 </p>
 
+<p align="center">
+  <img src="./assets/signal-intro.gif" alt="Signal: a lead job appears, a referral note is copied, and the next move is ready" width="720" />
+</p>
+
 Signal is a private, morning-first job-search workspace. It turns a personal jobs feed into a short ranked queue, explains why the strongest roles fit, and keeps the next step—apply, find a contact, copy a referral note, save, or snooze—close at hand.
 
 > ☀️ **The goal:** fewer tabs, fewer maybes, and one useful next move before your first coffee gets cold.
@@ -27,6 +31,10 @@ Signal is a private, morning-first job-search workspace. It turns a personal job
 3. **Keep momentum** — save it, snooze it until tomorrow, or clear it out.
 
 No applications or emails are sent automatically. You stay in control.
+
+## Human-led. AI-assisted.
+
+Signal is shaped and reviewed by [Aditya Ramachandran](https://github.com/Aditya-Ramachandran). ChatGPT helps with product exploration, interface design, implementation, and iteration—but the product direction and final decisions stay human.
 
 ## What it does
 
