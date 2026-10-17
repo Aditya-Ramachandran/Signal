@@ -18,5 +18,5 @@ export default function SignalFooter({ variant = 'default' }: SignalFooterProps)
   }, []);
 
   const workspace = variant === 'workspace';
-  return <footer ref={footerRef} className={`signal-footer ${settled ? 'is-settled' : ''}`}><div className="signal-footer-main"><div className="signal-footer-brand"><strong>Signal</strong><span>Less noise. More signal.</span></div><p><i aria-hidden="true" className="signal-footer-dot"/>{workspace ? 'Progress stays with your workspace.' : 'Tomorrow’s queue starts with one good decision.'}</p></div>{!workspace && <span className="signal-footer-note mono">Your pipeline. Your Sheet. Your job search.</span>}</footer>;
+  return <footer ref={footerRef} className={`signal-footer ${settled ? 'is-settled' : ''}`}><div className="signal-footer-main"><div><div className="signal-footer-brand"><strong>Signal</strong><span>Less noise. More signal.</span></div><p className="signal-footer-declaration">{workspace ? 'Keep the next move visible.' : 'Make tomorrow lighter.'}</p></div><div className="signal-footer-close"><p><i aria-hidden="true" className="signal-footer-dot"/>{workspace ? 'Progress stays with your workspace.' : 'Tomorrow’s queue starts with one good decision.'}</p>{!workspace && <span className="signal-footer-note mono">Your pipeline. Your Sheet. Your job search.</span>}</div></div></footer>;
 }
