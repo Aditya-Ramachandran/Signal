@@ -2,8 +2,11 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import type { Session } from '@supabase/supabase-js';
+import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 
 type Screen = 'home' | 'sign-in' | 'setup';
+type AuthState = 'checking' | 'signed-out' | 'allowed' | 'denied' | 'error';
 
 function SunIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42"/></svg>; }
 function MoonIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.7A8.5 8.5 0 0 1 9.3 3.5 8.5 8.5 0 1 0 20.5 14.7Z"/></svg>; }
@@ -21,17 +24,39 @@ export default function Welcome() {
   const [roles, setRoles] = useState('Backend engineer');
   const [locations, setLocations] = useState('Bengaluru, Hyderabad, Pune, India remote');
   const [endpoint, setEndpoint] = useState('');
+  const [authState, setAuthState] = useState<AuthState>('checking');
+  const [accountEmail, setAccountEmail] = useState('');
   const endpointLooksValid = /^https:\/\/.+/.test(endpoint.trim());
 
   useEffect(() => { if (window.localStorage.getItem('signal-theme') === 'dark') setTheme('dark'); }, []);
   useEffect(() => { document.documentElement.dataset.theme = theme; window.localStorage.setItem('signal-theme', theme); }, [theme]);
+  useEffect(() => {
+    const client = supabase;
+    if (!client) { setAuthState('error'); return; }
+    const applySession = async (session: Session | null) => {
+      if (!session?.user.email) { setAccountEmail(''); setAuthState('signed-out'); return; }
+      const email = session.user.email.toLowerCase();
+      setAccountEmail(email);
+      const { data, error } = await client.from('allowed_users').select('email').eq('email', email).maybeSingle();
+      setAuthState(error ? 'error' : data ? 'allowed' : 'denied');
+    };
+    void client.auth.getSession().then(({ data }) => applySession(data.session));
+    const { data: { subscription } } = client.auth.onAuthStateChange((_event, session) => { void applySession(session); });
+    return () => subscription.unsubscribe();
+  }, []);
   const goHome = () => { setScreen('home'); setSetupStep(1); setNotice(''); };
+  const signIn = async () => {
+    if (!supabase) { setNotice('Supabase is not configured for this build yet.'); return; }
+    const basePath = window.location.hostname.endsWith('github.io') ? '/Signal/' : '/';
+    const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: `${window.location.origin}${basePath}` } });
+    if (error) setNotice(`Could not start Google sign-in: ${error.message}`);
+  };
+  const signOut = async () => { await supabase?.auth.signOut(); setAccountEmail(''); setAuthState('signed-out'); goHome(); };
+  const openWorkspace = () => { const basePath = window.location.hostname.endsWith('github.io') ? '/Signal/' : '/'; window.location.assign(`${basePath}?app=1`); };
 
   return <main className="welcome-shell">
     <Header theme={theme} onTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')} onHome={goHome}/>
-    {screen === 'home' && <HomeScreen onSignIn={() => setScreen('sign-in')}/>} 
-    {screen === 'sign-in' && <SignInScreen notice={notice} onGoogle={() => setNotice('Google sign-in will appear here once Supabase and the Google provider are configured.')} onPreview={() => { setNotice(''); setScreen('setup'); }}/>} 
-    {screen === 'setup' && <SetupScreen step={setupStep} roles={roles} locations={locations} endpoint={endpoint} endpointLooksValid={endpointLooksValid} notice={notice} onRoles={setRoles} onLocations={setLocations} onEndpoint={(value) => { setEndpoint(value); setNotice(''); }} onNext={() => { if (setupStep === 2 && !endpointLooksValid) { setNotice('Paste the public read-only URL from your Apps Script bridge to continue.'); return; } setNotice(''); setSetupStep(Math.min(setupStep + 1, 3)); }} onBack={() => setupStep === 1 ? setScreen('sign-in') : setSetupStep(setupStep - 1)} onFinish={() => setNotice('Setup preview complete. Sign in with Google after Supabase is connected to save this workspace.')} />}
+    {authState === 'allowed' ? <SignedInScreen email={accountEmail} onOpen={openWorkspace} onSignOut={signOut}/> : authState === 'denied' ? <DeniedScreen email={accountEmail} onSignOut={signOut}/> : <>{screen === 'home' && <HomeScreen onSignIn={() => setScreen('sign-in')}/>} {screen === 'sign-in' && <SignInScreen notice={notice} configured={isSupabaseConfigured} onGoogle={signIn} onPreview={() => { setNotice(''); setScreen('setup'); }}/>} {screen === 'setup' && <SetupScreen step={setupStep} roles={roles} locations={locations} endpoint={endpoint} endpointLooksValid={endpointLooksValid} notice={notice} onRoles={setRoles} onLocations={setLocations} onEndpoint={(value) => { setEndpoint(value); setNotice(''); }} onNext={() => { if (setupStep === 2 && !endpointLooksValid) { setNotice('Paste the public read-only URL from your Apps Script bridge to continue.'); return; } setNotice(''); setSetupStep(Math.min(setupStep + 1, 3)); }} onBack={() => setupStep === 1 ? setScreen('sign-in') : setSetupStep(setupStep - 1)} onFinish={() => setNotice('Setup preview complete. Sign in with Google after Supabase is connected to save this workspace.')} />}</>}
   </main>;
 }
 
@@ -39,9 +64,12 @@ function HomeScreen({ onSignIn }: { onSignIn: () => void }) {
   return <section className="welcome-main"><div><h1>A better morning<br/>job search.</h1><p>Signal finds roles worth your time, turns the best ones into thoughtful outreach, and helps you follow through without losing your place.</p><div className="welcome-capabilities" aria-label="What Signal does"><span>Ranked job discovery</span><span>Referral messages</span><span>Contact research</span><span>Gmail-ready outreach</span><span>Saved &amp; later queues</span></div><div className="welcome-actions"><button className="welcome-google" onClick={onSignIn}><GoogleIcon/>Continue with Google</button><Link className="welcome-guest" href="/?demo=1">Try the guided demo</Link></div><p className="welcome-footnote">Guest mode uses sample roles and saves progress only on this device.</p></div><aside className="welcome-steps"><h2>Built for the whole loop.</h2><div><span>Jobs</span><strong>Find roles worth your time</strong><p>Fresh backend roles are ranked with fit notes, salary, experience, and a direct application path.</p></div><div><span>Outreach</span><strong>Turn interest into a real note</strong><p>Find the right person, personalize a referral message, or open an inferred-email draft in Gmail.</p></div><div><span>Momentum</span><strong>Keep your search moving</strong><p>Mark progress, save a role for later, or snooze it until tomorrow morning.</p></div></aside></section>;
 }
 
-function SignInScreen({ notice, onGoogle, onPreview }: { notice: string; onGoogle: () => void; onPreview: () => void }) {
-  return <section className="account-flow"><div className="account-copy"><h1>Your Signal stays yours.</h1><p>Sign in to keep a private queue, connect your own pipeline, and pick up your job search from any device.</p><p className="account-detail">Access is by invitation. Your Google identity opens your workspace; it never gives Signal access to your Gmail or Sheets.</p></div><div className="account-panel"><h2>Sign in to your workspace</h2><button className="welcome-google google-auth" onClick={onGoogle}><GoogleIcon/>Continue with Google</button>{notice && <p className="welcome-notice" role="status">{notice}</p>}<div className="account-divider"><span>or</span></div><button className="welcome-guest preview-button" onClick={onPreview}>Preview the connection setup</button><p className="account-help">Want to explore first? <Link href="/?demo=1">Open the guided demo.</Link></p></div></section>;
+function SignInScreen({ notice, configured, onGoogle, onPreview }: { notice: string; configured: boolean; onGoogle: () => void; onPreview: () => void }) {
+  return <section className="account-flow"><div className="account-copy"><h1>Your Signal stays yours.</h1><p>Sign in to keep a private queue, connect your own pipeline, and pick up your job search from any device.</p><p className="account-detail">Access is by invitation. Your Google identity opens your workspace; it never gives Signal access to your Gmail or Sheets.</p></div><div className="account-panel"><h2>Sign in to your workspace</h2><button className="welcome-google google-auth" onClick={onGoogle} disabled={!configured}><GoogleIcon/>Continue with Google</button>{!configured && <p className="welcome-notice" role="status">Supabase configuration is not available in this build.</p>}{notice && <p className="welcome-notice" role="status">{notice}</p>}<div className="account-divider"><span>or</span></div><button className="welcome-guest preview-button" onClick={onPreview}>Preview the connection setup</button><p className="account-help">Want to explore first? <Link href="/?demo=1">Open the guided demo.</Link></p></div></section>;
 }
+
+function SignedInScreen({ email, onOpen, onSignOut }: { email: string; onOpen: () => void; onSignOut: () => void }) { return <section className="account-flow"><div className="account-copy"><h1>Your workspace is ready.</h1><p>You are signed in as {email}. Your Signal preferences and job-search progress will belong only to this account.</p></div><div className="account-panel"><h2>Welcome back</h2><button className="welcome-google google-auth" onClick={onOpen}>Open Signal</button><button className="text-action account-signout" onClick={onSignOut}>Sign out</button></div></section>; }
+function DeniedScreen({ email, onSignOut }: { email: string; onSignOut: () => void }) { return <section className="account-flow"><div className="account-copy"><h1>This workspace is invite-only.</h1><p>{email} signed in successfully, but it is not on Signal’s approved-user list yet.</p></div><div className="account-panel"><h2>Access needs approval</h2><p className="account-help">Ask the Signal owner to add this exact Google email address to the invite list, then try again.</p><button className="text-action account-signout" onClick={onSignOut}>Use another Google account</button></div></section>; }
 
 type SetupProps = { step: number; roles: string; locations: string; endpoint: string; endpointLooksValid: boolean; notice: string; onRoles: (value: string) => void; onLocations: (value: string) => void; onEndpoint: (value: string) => void; onNext: () => void; onBack: () => void; onFinish: () => void; };
 function SetupScreen({ step, roles, locations, endpoint, endpointLooksValid, notice, onRoles, onLocations, onEndpoint, onNext, onBack, onFinish }: SetupProps) {
