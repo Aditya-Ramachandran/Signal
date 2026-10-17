@@ -4,7 +4,7 @@
 [data-theme='dark'] { --paper:#101719; --surface:#1a2426; --ink:#edf3f1; --muted:#a0b0ae; --faint:#71817f; --line:#314044; --accent:#ed624e; --accent-deep:#ff8a78; }
 * { box-sizing:border-box; }
 html { scroll-behavior:smooth; }
-body { margin:0; background:var(--paper); color:var(--ink); font-family:var(--sans); -webkit-font-smoothing:antialiased; transition:background-color .25s ease,color .25s ease; }
+body { margin:0; background:var(--paper); color:var(--ink); font-family:var(--sans); -webkit-font-smoothing:antialiased; transition:background-color .25s ease,color .25s ease; overflow-x:hidden; }
 button,a,select { font:inherit; }
 button,a,select { -webkit-tap-highlight-color:transparent; }
 button:focus-visible,a:focus-visible,select:focus-visible { outline:3px solid color-mix(in srgb,var(--accent) 45%,white); outline-offset:3px; }
@@ -93,13 +93,19 @@ h2 { font-size:22px; letter-spacing:-.035em; margin:0; font-weight:600; }
 @media (max-width:800px) {
   .shell { width:min(100% - 32px,620px); padding-top:22px; }
   .masthead,.intro { display:block; }
-  .mast-actions { margin-top:24px; justify-content:space-between; flex-wrap:wrap; }
+  .mast-actions { margin-top:24px; display:grid; grid-template-columns:minmax(0,1fr) auto auto; gap:7px; align-items:center; }
+  .date { font-size:11px; white-space:nowrap; }
+  .refresh,.theme-toggle { padding:8px 10px; font-size:12px; white-space:nowrap; }
+  .theme-toggle { gap:5px; }
+  .theme-toggle svg { width:14px; height:14px; }
   .intro-copy { margin-top:24px; }
   h1 { font-size:clamp(44px,14vw,64px); letter-spacing:-.035em; word-spacing:.02em; }
-  .stats { gap:18px; overflow-x:auto; }
-  .stat { min-width:100px; }
+  .stats { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; overflow:visible; }
+  .stat { min-width:0; }
+  .stat-value { font-size:22px; }
+  .stat-label { font-size:11px; white-space:nowrap; }
   .section-head { display:block; }
-  .filters { overflow-x:auto; flex-wrap:nowrap; margin-top:16px; padding-bottom:3px; }
+  .filters { overflow:visible; flex-wrap:wrap; margin-top:16px; padding-bottom:0; }
   .filter { white-space:nowrap; }
   .lead { display:block; padding:25px 21px; }
   .lead h2 { font-size:clamp(38px,12vw,60px); }
