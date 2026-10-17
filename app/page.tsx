@@ -5,60 +5,31 @@ import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from 'framer-m
 import { jobs as initialJobs, outreachContacts, type Job } from '../lib/sampleData';
 
 type Filter = 'All' | 'A' | 'B' | 'Applied' | 'Referred';
-type View = 'today' | 'saved' | 'later' | 'archive' | 'outreach';
-type BridgeResponse = { ok?: boolean; jobs?: Record<string, unknown>[]; error?: string };
+type View = 'today' | 'saved' | 'later' | 'outreach';
 type JobMeta = { saved?: boolean; snoozedUntil?: string };
 type StoredStatuses = Record<string, Job['status']>;
+type BridgeResponse = { ok?: boolean; jobs?: Record<string, unknown>[]; error?: string };
 
 const liveJobsUrl = process.env.NEXT_PUBLIC_SIGNAL_JOBS_URL;
 const STATUS_STORAGE_KEY = 'signal-job-statuses';
 const META_STORAGE_KEY = 'signal-job-meta';
+const LEAD_REVIEWED_KEY = 'signal-lead-reviewed';
 
 function readJson<T>(key: string, fallback: T): T {
-  try {
-    const value = window.localStorage.getItem(key);
-    return value ? JSON.parse(value) as T : fallback;
-  } catch { return fallback; }
+  try { const value = window.localStorage.getItem(key); return value ? JSON.parse(value) as T : fallback; } catch { return fallback; }
 }
-
-function withSavedStatuses(items: Job[], statuses = readJson<StoredStatuses>(STATUS_STORAGE_KEY, {})) {
-  return items.map((job) => statuses[job.id] ? { ...job, status: statuses[job.id] } : job);
-}
-
-function tomorrow() {
-  const date = new Date();
-  date.setDate(date.getDate() + 1);
-  return date.toISOString().slice(0, 10);
-}
-
-function isSnoozed(meta: JobMeta | undefined) {
-  // A role snoozed today returns at the start of the next local day.
-  return Boolean(meta?.snoozedUntil && new Date(`${meta.snoozedUntil}T00:00:00`).getTime() > Date.now());
-}
-
-function stringValue(value: unknown, fallback = '') {
-  return typeof value === 'string' || typeof value === 'number' ? String(value).trim() || fallback : fallback;
-}
-
-function field(row: Record<string, unknown>, ...names: string[]) {
-  const match = Object.entries(row).find(([key]) => names.some((name) => key.toLowerCase() === name.toLowerCase()));
-  return match ? stringValue(match[1]) : '';
-}
-
-function formatDate(value: string) {
-  const date = new Date(`${value}T00:00:00`);
-  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(date);
-}
-
-function daysAgo(value: string) {
-  const date = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return 0;
-  return Math.max(0, Math.round((Date.now() - date.getTime()) / 86_400_000));
-}
+function withSavedStatuses(items: Job[], statuses = readJson<StoredStatuses>(STATUS_STORAGE_KEY, {})) { return items.map((job) => statuses[job.id] ? { ...job, status: statuses[job.id] } : job); }
+function stringValue(value: unknown, fallback = '') { return typeof value === 'string' || typeof value === 'number' ? String(value).trim() || fallback : fallback; }
+function field(row: Record<string, unknown>, ...names: string[]) { const match = Object.entries(row).find(([key]) => names.some((name) => key.toLowerCase() === name.toLowerCase())); return match ? stringValue(match[1]) : ''; }
+function formatDate(value: string) { const date = new Date(`${value}T00:00:00`); return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(date); }
+function daysAgo(value: string) { const date = new Date(`${value}T00:00:00`); return Number.isNaN(date.getTime()) ? 0 : Math.max(0, Math.round((Date.now() - date.getTime()) / 86_400_000)); }
+function tomorrow() { const date = new Date(); date.setDate(date.getDate() + 1); return date.toISOString().slice(0, 10); }
+function isSnoozed(meta: JobMeta | undefined) { return Boolean(meta?.snoozedUntil && new Date(`${meta.snoozedUntil}T00:00:00`).getTime() > Date.now()); }
+function contactsSearchLink(job: Job) { return `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(`"${job.company}" AND ("engineering manager" OR "tech lead" OR recruiter)`)}`; }
+function postedLabel(job: Job) { return job.postedDaysAgo === 0 ? 'posted today' : `posted ${job.postedDaysAgo} day${job.postedDaysAgo > 1 ? 's' : ''} ago`; }
 
 function jobsFromBridge(payload: BridgeResponse): Job[] {
   if (!payload.ok || !Array.isArray(payload.jobs)) return [];
-
   return payload.jobs.map((row, index) => {
     const company = field(row, 'Company', 'company') || 'Unknown company';
     const role = field(row, 'Role', 'role') || 'Backend role';
@@ -68,27 +39,18 @@ function jobsFromBridge(payload: BridgeResponse): Job[] {
     const status: Job['status'] = ['New', 'Applied', 'Referred', 'Rejected'].includes(rawStatus) ? rawStatus as Job['status'] : 'New';
     const tier: Job['tier'] = field(row, 'Tier', 'tier').toUpperCase() === 'A' ? 'A' : 'B';
     const jobId = field(row, 'Job ID', 'jobId') || `live-${index + 1}`;
-    const applyLink = field(row, 'Link', 'Apply Link', 'applyLink');
-    const findContactsLink = field(row, 'Find Contacts Link', 'findContactsLink') || `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(`${company} ${role}`)}`;
-
     return {
-      id: jobId,
-      company,
-      role,
+      id: jobId, company, role,
       location: field(row, 'Location', 'location') || 'Location not stated',
       companySize: field(row, 'Company Size', 'companySize') || 'Unknown',
-      postedDate: formatDate(postedDate),
-      postedDaysAgo: daysAgo(postedDate),
+      postedDate: formatDate(postedDate), postedDaysAgo: daysAgo(postedDate),
       experience: field(row, 'Experience', 'experience') || 'Not stated',
       salary: field(row, 'Salary (source)', 'Salary', 'salary') || 'Not disclosed',
-      applyLink: applyLink || '#',
-      jobId,
-      idType: field(row, 'ID Type', 'idType') || 'portal',
-      tier,
-      status,
+      applyLink: field(row, 'Link', 'Apply Link', 'applyLink') || '#', jobId,
+      idType: field(row, 'ID Type', 'idType') || 'portal', tier, status,
       whyFit: field(row, 'Why it fits', 'Why Fit', 'whyFit') || 'Relevant backend opening from your daily search.',
-      referralMessage: field(row, 'Referral Message', 'referralMessage') || `Hi — I’m interested in the ${role} role at ${company}. Would you be open to pointing me to the right hiring contact?`,
-      findContactsLink,
+      referralMessage: field(row, 'Referral Message', 'referralMessage') || `Hi {Name}, I’m interested in the ${role} role at ${company}. Would you be open to pointing me to the right hiring contact?`,
+      findContactsLink: field(row, 'Find Contacts Link', 'findContactsLink') || contactsSearchLink({ company } as Job),
       dateFound: formatDate(dateFound),
     };
   }).sort((a, b) => a.tier.localeCompare(b.tier) || a.postedDaysAgo - b.postedDaysAgo);
@@ -102,38 +64,29 @@ export default function Home() {
   const [filter, setFilter] = useState<Filter>('All');
   const [jobState, setJobState] = useState<Job[]>(initialJobs);
   const [jobMeta, setJobMeta] = useState<Record<string, JobMeta>>({});
-  const [hasRestoredProgress, setHasRestoredProgress] = useState(false);
-  const [isGuestDemo, setIsGuestDemo] = useState(false);
-  const [isLoadingJobs, setIsLoadingJobs] = useState(Boolean(liveJobsUrl));
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [toast, setToast] = useState('');
+  const [undoAction, setUndoAction] = useState<null | (() => void)>(null);
+  const [isGuestDemo, setIsGuestDemo] = useState(false);
+  const [isLoadingJobs, setIsLoadingJobs] = useState(Boolean(liveJobsUrl));
+  const [leadMessageOpen, setLeadMessageOpen] = useState(true);
+  const [hasRestoredProgress, setHasRestoredProgress] = useState(false);
   const reducedMotion = useReducedMotion();
   const briefingDate = jobState[0]?.dateFound || '17 Oct 2026';
-  const lastRun = '08:12';
 
+  const announce = (message: string, undo?: () => void) => { setToast(message); setUndoAction(() => undo ?? null); };
   useEffect(() => { const saved = window.localStorage.getItem('signal-theme'); if (saved === 'dark') setTheme('dark'); }, []);
-  useEffect(() => { setIsGuestDemo(new URLSearchParams(window.location.search).has('demo')); }, []);
   useEffect(() => { document.documentElement.dataset.theme = theme; window.localStorage.setItem('signal-theme', theme); }, [theme]);
-  useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => setToast(''), 2200); return () => window.clearTimeout(timer); }, [toast]);
-  useEffect(() => {
-    const statuses = readJson<StoredStatuses>(STATUS_STORAGE_KEY, {});
-    setJobState((items) => withSavedStatuses(items, statuses));
-    setJobMeta(readJson<Record<string, JobMeta>>(META_STORAGE_KEY, {}));
-    setHasRestoredProgress(true);
-  }, []);
-  useEffect(() => {
-    if (!hasRestoredProgress) return;
-    const statuses = Object.fromEntries(jobState.map((job) => [job.id, job.status]));
-    window.localStorage.setItem(STATUS_STORAGE_KEY, JSON.stringify(statuses));
-  }, [hasRestoredProgress, jobState]);
-  useEffect(() => {
-    if (hasRestoredProgress) window.localStorage.setItem(META_STORAGE_KEY, JSON.stringify(jobMeta));
-  }, [hasRestoredProgress, jobMeta]);
+  useEffect(() => { setIsGuestDemo(new URLSearchParams(window.location.search).has('demo')); setLeadMessageOpen(!Boolean(window.localStorage.getItem(LEAD_REVIEWED_KEY))); }, []);
+  useEffect(() => { window.localStorage.setItem(LEAD_REVIEWED_KEY, 'true'); }, []);
+  useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => { setToast(''); setUndoAction(null); }, 5000); return () => window.clearTimeout(timer); }, [toast]);
+  useEffect(() => { const statuses = readJson<StoredStatuses>(STATUS_STORAGE_KEY, {}); setJobState((items) => withSavedStatuses(items, statuses)); setJobMeta(readJson<Record<string, JobMeta>>(META_STORAGE_KEY, {})); setHasRestoredProgress(true); }, []);
+  useEffect(() => { if (hasRestoredProgress) window.localStorage.setItem(STATUS_STORAGE_KEY, JSON.stringify(Object.fromEntries(jobState.map((job) => [job.id, job.status])))); }, [hasRestoredProgress, jobState]);
+  useEffect(() => { if (hasRestoredProgress) window.localStorage.setItem(META_STORAGE_KEY, JSON.stringify(jobMeta)); }, [hasRestoredProgress, jobMeta]);
 
   const loadLiveJobs = async () => {
-    if (new URLSearchParams(window.location.search).has('demo')) return false;
-    if (!liveJobsUrl) return false;
+    if (new URLSearchParams(window.location.search).has('demo') || !liveJobsUrl) return false;
     setIsLoadingJobs(true);
     try {
       const response = await fetch(liveJobsUrl, { cache: 'no-store' });
@@ -142,84 +95,72 @@ export default function Home() {
       if (!response.ok || !liveJobs.length) throw new Error(payload.error || 'No jobs returned');
       setJobState(withSavedStatuses(liveJobs));
       return true;
-    } catch {
-      setToast('Live jobs unavailable — showing the saved sample queue');
-      return false;
-    } finally {
-      setIsLoadingJobs(false);
-    }
+    } catch { announce('Live jobs unavailable — showing the saved sample queue'); return false; } finally { setIsLoadingJobs(false); }
   };
-
-  useEffect(() => { void loadLiveJobs(); }, []); // The URL is injected at build time for the static export.
+  useEffect(() => { void loadLiveJobs(); }, []);
 
   const todayJobs = useMemo(() => jobState.filter((job) => job.status !== 'Rejected' && !jobMeta[job.id]?.saved && !isSnoozed(jobMeta[job.id])), [jobMeta, jobState]);
   const savedJobs = useMemo(() => jobState.filter((job) => job.status !== 'Rejected' && jobMeta[job.id]?.saved && !isSnoozed(jobMeta[job.id])), [jobMeta, jobState]);
   const laterJobs = useMemo(() => jobState.filter((job) => isSnoozed(jobMeta[job.id])), [jobMeta, jobState]);
-  const archivedJobs = useMemo(() => jobState.filter((job) => job.status === 'Rejected'), [jobState]);
-  const activeJobs = activeView === 'saved' ? savedJobs : activeView === 'later' ? laterJobs : activeView === 'archive' ? archivedJobs : todayJobs;
+  const activeJobs = activeView === 'saved' ? savedJobs : activeView === 'later' ? laterJobs : todayJobs;
   const filteredJobs = useMemo(() => activeJobs.filter((job) => activeView !== 'today' || filter === 'All' || (filter === 'A' && job.tier === 'A') || (filter === 'B' && job.tier === 'B') || job.status === filter), [activeJobs, activeView, filter]);
   const lead = filteredJobs[0];
   const queuedJobs = lead ? filteredJobs.filter((job) => job.id !== lead.id) : [];
   const newToday = jobState.filter((job) => job.dateFound === briefingDate);
   const handledToday = newToday.filter((job) => job.status !== 'New' || jobMeta[job.id]?.saved || isSnoozed(jobMeta[job.id])).length;
-  const setStatus = (id: string, status: Job['status']) => { setJobState((items) => items.map((job) => job.id === id ? { ...job, status } : job)); setToast(status === 'Applied' ? 'Marked as applied' : status === 'Rejected' ? 'Removed from today’s queue' : `Status updated to ${status}`); };
-  const toggleSaved = (id: string) => { setJobMeta((items) => ({ ...items, [id]: { ...items[id], saved: !items[id]?.saved } })); setToast(jobMeta[id]?.saved ? 'Removed from saved' : 'Saved for later'); };
-  const snooze = (id: string) => { setJobMeta((items) => ({ ...items, [id]: { ...items[id], snoozedUntil: tomorrow() } })); setToast('Snoozed until tomorrow morning'); };
-  const copy = async (text: string) => { try { await navigator.clipboard.writeText(text); setToast('Copied to clipboard'); } catch { setToast('Copy unavailable — select the text manually'); } };
-  const refresh = async () => {
-    if (isGuestDemo) { setToast('Demo queue refreshed'); return; }
-    if (await loadLiveJobs()) setToast('Queue refreshed from your tracker');
-    else if (!liveJobsUrl) setToast('Add NEXT_PUBLIC_SIGNAL_JOBS_URL to load your tracker');
+
+  const setStatus = (id: string, status: Job['status']) => {
+    const previous = jobState.find((job) => job.id === id)?.status || 'New';
+    setJobState((items) => items.map((job) => job.id === id ? { ...job, status } : job));
+    const message = status === 'Applied' ? 'Marked as applied on this device' : status === 'Rejected' ? 'Removed from your queue' : `Marked as ${status.toLowerCase()} on this device`;
+    announce(message, () => setJobState((items) => items.map((job) => job.id === id ? { ...job, status: previous } : job)));
   };
-  const motionProps = reducedMotion ? {} : { initial: { opacity: 0, y: 14 }, animate: { opacity: 1, y: 0 }, transition: { duration: .45, ease: 'easeOut' as const } };
+  const toggleSaved = (id: string) => {
+    const previous = jobMeta[id] || {};
+    const next = !previous.saved;
+    setJobMeta((items) => ({ ...items, [id]: { ...previous, saved: next } }));
+    announce(next ? 'Saved on this device' : 'Moved back to Today', () => setJobMeta((items) => ({ ...items, [id]: previous })));
+  };
+  const snooze = (id: string) => {
+    const previous = jobMeta[id] || {};
+    setJobMeta((items) => ({ ...items, [id]: { ...previous, snoozedUntil: tomorrow() } }));
+    announce('Snoozed until tomorrow morning', () => setJobMeta((items) => ({ ...items, [id]: previous })));
+  };
+  const unsnooze = (id: string) => {
+    const previous = jobMeta[id] || {};
+    const { snoozedUntil: _snoozedUntil, ...next } = previous;
+    setJobMeta((items) => ({ ...items, [id]: next }));
+    announce('Moved back to Today', () => setJobMeta((items) => ({ ...items, [id]: previous })));
+  };
+  const copy = async (text: string) => { try { await navigator.clipboard.writeText(text); announce('Message copied'); } catch { announce('Copy unavailable — select the message manually'); } };
+  const reviewLeadMessage = () => { setLeadMessageOpen(true); window.localStorage.setItem(LEAD_REVIEWED_KEY, 'true'); };
+  const refresh = async () => { if (isGuestDemo) { announce('Demo queue refreshed'); return; } if (await loadLiveJobs()) announce('Queue refreshed from your tracker'); else if (!liveJobsUrl) announce('Add NEXT_PUBLIC_SIGNAL_JOBS_URL to load your tracker'); };
+  const motionProps = reducedMotion ? {} : { initial: { opacity: 0, y: 14 }, animate: { opacity: 1, y: 0 }, transition: { duration: .35, ease: 'easeOut' as const } };
 
   return <main className="shell">
-    <header className="masthead">
-      <div className="brand"><span className="mark" aria-hidden="true"/><div><div className="wordmark">Signal</div><div className="tagline">Less noise. More signal.</div></div></div>
-      <div className="mast-actions"><span className="date mono">SAT, 17 OCT 2026</span><button className="theme-toggle" aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <SunIcon/> : <MoonIcon/>}<span>{theme === 'dark' ? 'Light theme' : 'Dark theme'}</span></button><button className="refresh" onClick={refresh}>Refresh queue</button></div>
-    </header>
+    <header className="masthead"><div className="brand"><span className="mark" aria-hidden="true"/><div><div className="wordmark">Signal</div><div className="tagline">Less noise. More signal.</div></div></div><div className="mast-actions"><span className="date mono">SAT, 17 OCT 2026</span><button className="theme-toggle" aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <SunIcon/> : <MoonIcon/>}<span>{theme === 'dark' ? 'Light theme' : 'Dark theme'}</span></button><button className="refresh" onClick={refresh}>Refresh queue</button></div></header>
     {isGuestDemo && <aside className="guest-notice"><div><span className="mono">GUEST DEMO</span><strong>Sample roles, real workflow — nothing is sent.</strong></div><a href="https://github.com/Aditya-Ramachandran/Signal" target="_blank" rel="noreferrer">Liked this? Set up your own Signal ↗</a></aside>}
-
-    <motion.section className="stats" aria-label="Queue summary" {...(reducedMotion ? {} : { initial: { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0 }, transition: { delay: .08, duration: .4 } })}>
-      <Stat value={String(jobState.filter((job) => job.dateFound === briefingDate).length)} label="new today"/><Stat value={String(jobState.filter((job) => job.tier === 'A').length)} label="Tier A roles"/><Stat value={isLoadingJobs ? '…' : lastRun} label={isLoadingJobs ? 'loading tracker' : 'last run, IST'}/>
-    </motion.section>
-
-    <nav className="view-tabs" aria-label="Views">{(['today', 'saved', 'later', 'archive', 'outreach'] as View[]).map((view) => <button key={view} className={`view-tab ${activeView === view ? 'active' : ''}`} onClick={() => setActiveView(view)}>{view === 'today' ? 'Today' : view === 'saved' ? <>Saved <span className="tab-count mono">{savedJobs.length}</span></> : view === 'later' ? <>Later <span className="tab-count mono">{laterJobs.length}</span></> : view === 'archive' ? 'Archive' : 'Outreach'}</button>)}</nav>
-
-    <AnimatePresence mode="wait">{activeView !== 'outreach' ? <motion.section key={activeView} className="view active" {...motionProps}>
-      <div className="section-head"><div><h2>{activeView === 'today' ? 'Morning queue' : activeView === 'saved' ? 'Saved for later' : activeView === 'later' ? 'Coming back later' : 'Archive'}</h2><p className="queue-progress">{activeView === 'today' ? <><span className="mono">{handledToday}/{newToday.length}</span> new roles actioned today</> : activeView === 'saved' ? 'Roles you deliberately kept for another pass.' : activeView === 'later' ? 'Snoozed roles return here until their scheduled date.' : 'Dismissed or rejected roles remain recoverable.'}</p></div>{activeView === 'today' && <div className="filters" role="tablist" aria-label="Filter jobs">{(['All', 'A', 'B', 'Applied', 'Referred'] as Filter[]).map((item) => <button key={item} className={`filter ${filter === item ? 'active' : ''}`} onClick={() => { setFilter(item); setExpandedId(null); }}>{item === 'A' ? 'Tier A' : item === 'B' ? 'Tier B' : item}{item === 'All' && <span className="mono"> {todayJobs.length}</span>}</button>)}</div>}</div>
-      {lead ? <><LeadJob job={lead} saved={Boolean(jobMeta[lead.id]?.saved)} leadLabel={activeView === 'today' ? 'Today’s lead' : activeView === 'saved' ? 'Saved role' : activeView === 'later' ? 'Snoozed role' : 'Archived role'} onCopy={copy} onStatus={setStatus} onSave={toggleSaved} onSnooze={snooze} /><LayoutGroup><div className="job-list">{queuedJobs.map((job) => <JobRow key={job.id} job={job} saved={Boolean(jobMeta[job.id]?.saved)} rank={jobState.indexOf(job) + 1} expanded={expandedId === job.id} onToggle={() => setExpandedId(expandedId === job.id ? null : job.id)} onCopy={copy} onStatus={setStatus} onSave={toggleSaved} onSnooze={snooze} reducedMotion={reducedMotion} />)}</div></LayoutGroup></> : <div className="empty">{activeView === 'today' ? 'Nothing new today.' : activeView === 'saved' ? 'No saved roles yet.' : activeView === 'later' ? 'Nothing is snoozed.' : 'Your archive is clear.'}</div>}
-    </motion.section> : <motion.section key="outreach" className="view active" {...motionProps}><div className="section-head"><h2>Cold-email batch</h2><p className="intro-copy compact">{outreachContacts.filter((contact) => contact.emailInferred).length} inferred emails are ready to review in Gmail before sending.</p></div><div className="outreach-list">{outreachContacts.map((contact) => <OutreachRow key={contact.id} contact={contact} onCopy={copy}/>)}</div></motion.section>}</AnimatePresence>
-    <div className={`toast ${toast ? 'show' : ''}`} role="status" aria-live="polite">{toast}</div>
+    <motion.section className="stats" aria-label="Queue summary" {...(reducedMotion ? {} : { initial: { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0 }, transition: { delay: .08, duration: .35 } })}><Stat value={String(newToday.length)} label="new today"/><Stat value={String(todayJobs.filter((job) => job.tier === 'A').length)} label="worth a referral"/><Stat value={isLoadingJobs ? '…' : '08:12'} label={isLoadingJobs ? 'loading tracker' : 'updated, IST'}/></motion.section>
+    <nav className="view-tabs" aria-label="Views"><button className={`view-tab ${activeView === 'today' ? 'active' : ''}`} onClick={() => setActiveView('today')}>Today</button><button className={`view-tab ${activeView === 'saved' ? 'active' : ''}`} onClick={() => setActiveView('saved')}>Saved <span className="tab-count mono">{savedJobs.length}</span></button><button className={`view-tab ${activeView === 'later' ? 'active' : ''}`} onClick={() => setActiveView('later')}>Later <span className="tab-count mono">{laterJobs.length}</span></button><button className={`view-tab ${activeView === 'outreach' ? 'active' : ''}`} onClick={() => setActiveView('outreach')}>Outreach</button></nav>
+    <AnimatePresence mode="wait">{activeView !== 'outreach' ? <motion.section key={activeView} className="view active" {...motionProps}><div className="section-head"><div><h2>{activeView === 'today' ? 'Morning queue' : activeView === 'saved' ? 'Saved for later' : 'Coming back later'}</h2><p className="queue-progress">{activeView === 'today' ? <><span className="mono">{handledToday}/{newToday.length}</span> new roles actioned today <span className="storage-note">Progress is saved on this device.</span></> : activeView === 'saved' ? 'Roles you deliberately kept for another pass.' : 'Snoozed roles return to Today tomorrow morning.'}</p></div>{activeView === 'today' && <div className="filters" role="tablist" aria-label="Filter jobs">{(['All', 'A', 'B', 'Applied', 'Referred'] as Filter[]).map((item) => <button key={item} className={`filter ${filter === item ? 'active' : ''}`} onClick={() => { setFilter(item); setExpandedId(null); }}>{item === 'A' ? 'Tier A' : item === 'B' ? 'Tier B' : item}{item === 'All' && <span className="mono"> {todayJobs.length}</span>}</button>)}</div>}</div>{lead ? <><LeadJob job={lead} view={activeView} saved={Boolean(jobMeta[lead.id]?.saved)} messageOpen={leadMessageOpen} onReviewMessage={reviewLeadMessage} onCopy={copy} onNeedName={() => announce('Add a contact name before copying')} onStatus={setStatus} onSave={toggleSaved} onSnooze={snooze} onUnsnooze={unsnooze}/><LayoutGroup><div className="job-list">{queuedJobs.map((job) => <JobRow key={job.id} job={job} view={activeView} saved={Boolean(jobMeta[job.id]?.saved)} rank={jobState.indexOf(job) + 1} expanded={expandedId === job.id} onToggle={() => setExpandedId(expandedId === job.id ? null : job.id)} onCopy={copy} onNeedName={() => announce('Add a contact name before copying')} onStatus={setStatus} onSave={toggleSaved} onSnooze={snooze} onUnsnooze={unsnooze} reducedMotion={reducedMotion}/>)}</div></LayoutGroup></> : <div className="empty">{activeView === 'today' ? 'Nothing new today.' : activeView === 'saved' ? 'No saved roles yet.' : 'Nothing is snoozed.'}</div>}</motion.section> : <motion.section key="outreach" className="view active" {...motionProps}><div className="section-head"><h2>Cold-email batch</h2><p className="intro-copy compact">{outreachContacts.filter((contact) => contact.emailInferred).length} inferred emails are ready to review in Gmail before sending.</p></div><div className="outreach-list">{outreachContacts.map((contact) => <OutreachRow key={contact.id} contact={contact} onCopy={copy}/>)}</div></motion.section>}</AnimatePresence>
+    <div className={`toast ${toast ? 'show' : ''}`} role="status" aria-live="polite"><span>{toast}</span>{undoAction && <button onClick={() => { undoAction(); announce('Change undone'); }}>Undo</button>}</div>
   </main>;
 }
 
 function Stat({ value, label }: { value: string; label: string }) { return <div className="stat"><div className="stat-value mono">{value}</div><div className="stat-label">{label}</div></div>; }
 
-function postedLabel(job: Job) { return job.postedDaysAgo === 0 ? 'posted today' : `posted ${job.postedDaysAgo} day${job.postedDaysAgo > 1 ? 's' : ''} ago`; }
-function rankReason(job: Job) { return job.tier === 'A' ? `${job.postedDaysAgo === 0 ? 'Fresh today' : postedLabel(job)} · ${job.location.split(' · ')[0]} · direct stack match` : 'Apply-first role · relevant backend scope'; }
-function contactsSearchLink(job: Job) {
-  // Without the parentheses, LinkedIn treats generic title terms after OR as independent matches.
-  const query = `"${job.company}" AND ("engineering manager" OR "tech lead" OR recruiter)`;
-  return `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(query)}`;
+type ActionsProps = { job: Job; view: Exclude<View, 'outreach'>; saved: boolean; onCopy: (text: string) => void; onNeedName: () => void; onStatus: (id: string, status: Job['status']) => void; onSave: (id: string) => void; onSnooze: (id: string) => void; onUnsnooze: (id: string) => void; };
+function JobActions({ job, view, saved, onCopy, onNeedName, onStatus, onSave, onSnooze, onUnsnooze }: ActionsProps) {
+  const [contactName, setContactName] = useState('');
+  const needsName = job.referralMessage.includes('{Name}');
+  const copyMessage = () => { if (needsName && !contactName.trim()) { onNeedName(); return; } onCopy(job.referralMessage.replaceAll('{Name}', contactName.trim())); };
+  return <><div className="actions"><button className="btn primary" onClick={copyMessage}>Copy message</button><a className="btn" href={contactsSearchLink(job)} target="_blank" rel="noreferrer">Find a person</a><a className="btn" href={job.applyLink} target="_blank" rel="noreferrer">Apply ↗</a><details className="action-menu"><summary>More</summary><div><button onClick={() => onStatus(job.id, 'Applied')}>I applied</button><button onClick={() => onSave(job.id)}>{saved ? 'Move to Today' : 'Save for later'}</button>{view === 'later' ? <button onClick={() => onUnsnooze(job.id)}>Bring back today</button> : <button onClick={() => onSnooze(job.id)}>Snooze until tomorrow</button>}<button onClick={() => onStatus(job.id, 'Rejected')}>Not a fit</button></div></details></div>{needsName && <label className="contact-name-input">Contact first name <input value={contactName} onChange={(event) => setContactName(event.target.value)} placeholder="e.g. Priya"/> <span>Required before copying.</span></label>}</>;
 }
 
-function LeadJob({ job, saved, leadLabel, onCopy, onStatus, onSave, onSnooze }: { job: Job; saved: boolean; leadLabel: string; onCopy: (text: string) => void; onStatus: (id: string, status: Job['status']) => void; onSave: (id: string) => void; onSnooze: (id: string) => void }) { return <article className={`lead tier-${job.tier.toLowerCase()}`}><div><div className="lead-kicker">{leadLabel} · Tier {job.tier}</div><h2>{job.role}</h2><div className="company">{job.company}</div><div className="facts lead-facts"><span>{job.location}</span><span>{job.experience}</span><span>{job.salary}</span><span>{postedLabel(job)}</span></div></div><div className="lead-why"><p>{job.whyFit}</p><div className="facts"><span>{job.companySize}</span><span>{job.jobId}</span></div></div><div className="message"><div className="message-label">Referral message · {job.jobId}</div><p>{job.referralMessage}</p><div className="actions"><button className="btn primary" onClick={() => onCopy(job.referralMessage)}>Copy referral</button><a className="btn" href={contactsSearchLink(job)} target="_blank" rel="noreferrer">Find contacts</a><a className="btn" href={job.applyLink} target="_blank" rel="noreferrer">Apply ↗</a><button className="btn" disabled={job.status === 'Applied'} onClick={() => onStatus(job.id, 'Applied')}>{job.status === 'Applied' ? 'Applied' : 'Mark applied'}</button><button className="btn quiet" onClick={() => onSave(job.id)}>{saved ? 'Saved' : 'Save for later'}</button><button className="text-action" onClick={() => onSnooze(job.id)}>Snooze</button><button className="text-action" onClick={() => onStatus(job.id, 'Rejected')}>Not relevant</button></div></div></article>; }
+function LeadJob({ job, view, saved, messageOpen, onReviewMessage, ...actions }: ActionsProps & { messageOpen: boolean; onReviewMessage: () => void }) { return <article className={`lead tier-${job.tier.toLowerCase()}`}><div><div className="lead-kicker">{view === 'today' ? 'Best next move' : view === 'saved' ? 'Saved role' : 'Snoozed role'} · Tier {job.tier}</div><h2>{job.role}</h2><div className="company">{job.company}</div><div className="facts lead-facts"><span>{job.location}</span><span>{job.experience}</span><span>{job.salary}</span><span>{postedLabel(job)}</span></div></div><div className="lead-why"><p>{job.whyFit}</p><div className="facts"><span>{job.companySize}</span><span>Listing ref. {job.jobId}</span></div></div><div className="message"><div className="message-label">Referral message · {job.jobId}</div>{messageOpen ? <p>{job.referralMessage}</p> : <p className="message-preview">A tailored referral note is ready when you need it.</p>}{!messageOpen && <button className="review-note" onClick={onReviewMessage}>Review referral note</button>}<JobActions job={job} view={view} saved={saved} {...actions}/></div></article>; }
 
-function JobRow({ job, saved, rank, expanded, onToggle, onCopy, onStatus, onSave, onSnooze, reducedMotion }: { job: Job; saved: boolean; rank: number; expanded: boolean; onToggle: () => void; onCopy: (text: string) => void; onStatus: (id: string, status: Job['status']) => void; onSave: (id: string) => void; onSnooze: (id: string) => void; reducedMotion: boolean | null }) { return <motion.article layout className={`job-row ${expanded ? 'expanded' : ''}`} transition={reducedMotion ? { duration: 0 } : { duration: .25 }}><button className="job-main" aria-expanded={expanded} onClick={onToggle}><span className="rank">{String(rank).padStart(2, '0')}</span><span className="role">{job.role}<small>{job.company}</small>{job.tier === 'A' && <small className="rank-reason">{rankReason(job)}</small>}</span><span className="job-meta">{job.location}<small>{job.experience}</small></span><span className="job-meta">{job.postedDaysAgo === 0 ? 'today' : `${job.postedDaysAgo} day${job.postedDaysAgo > 1 ? 's' : ''} ago`}<small>{saved ? 'Saved' : job.status}</small></span><span className={`tier ${job.tier === 'A' ? 'a' : ''}`}>Tier {job.tier}</span><span className="chevron">⌄</span></button><AnimatePresence initial={false}>{expanded && <motion.div className="job-detail" initial={reducedMotion ? false : { opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}><p className="job-detail-copy"><strong>Why it fits.</strong> {job.whyFit}</p><div className="message-label">Referral message · {job.jobId}</div><p className="job-detail-copy">{job.referralMessage}</p><div className="actions"><button className="btn primary" onClick={() => onCopy(job.referralMessage)}>Copy referral</button><a className="btn" href={contactsSearchLink(job)} target="_blank" rel="noreferrer">Find contacts</a><a className="btn" href={job.applyLink} target="_blank" rel="noreferrer">Apply ↗</a><button className="btn" disabled={job.status === 'Applied'} onClick={() => onStatus(job.id, 'Applied')}>{job.status === 'Applied' ? 'Applied' : 'Mark applied'}</button><button className="btn quiet" onClick={() => onSave(job.id)}>{saved ? 'Saved' : 'Save for later'}</button><button className="text-action" onClick={() => onSnooze(job.id)}>Snooze</button><button className="text-action" onClick={() => onStatus(job.id, 'Rejected')}>Not relevant</button></div></motion.div>}</AnimatePresence></motion.article>; }
+function JobRow({ job, view, saved, rank, expanded, onToggle, reducedMotion, ...actions }: ActionsProps & { rank: number; expanded: boolean; onToggle: () => void; reducedMotion: boolean | null }) { return <motion.article layout className={`job-row ${expanded ? 'expanded' : ''}`} transition={reducedMotion ? { duration: 0 } : { duration: .25 }}><button className="job-main" aria-expanded={expanded} onClick={onToggle}><span className="rank">{String(rank).padStart(2, '0')}</span><span className="role">{job.role}<small>{job.company}</small>{job.tier === 'A' && <small className="rank-reason">Worth a referral attempt</small>}</span><span className="job-meta">{job.location}<small>{job.experience}</small></span><span className="job-meta">{job.postedDaysAgo === 0 ? 'today' : `${job.postedDaysAgo} days ago`}<small>{saved ? 'Saved' : job.status}</small></span><span className={`tier ${job.tier === 'A' ? 'a' : ''}`} aria-label={`Tier ${job.tier}${job.tier === 'A' ? ': worth a referral attempt' : ''}`}>Tier {job.tier}</span><span className="chevron">⌄</span></button><AnimatePresence initial={false}>{expanded && <motion.div className="job-detail" initial={reducedMotion ? false : { opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}><p className="job-detail-copy"><strong>Why it fits.</strong> {job.whyFit}</p><div className="message-label">Referral message · {job.jobId}</div><p className="job-detail-copy">{job.referralMessage}</p><JobActions job={job} view={view} saved={saved} {...actions}/></motion.div>}</AnimatePresence></motion.article>; }
 
-function inferEmail(contact: (typeof outreachContacts)[number]) {
-  const localPart = contact.name.toLowerCase().replace(/[^a-z]+/g, '.').replace(/^\.|\.$/g, '');
-  const domain = contact.company.toLowerCase().replace(/[^a-z0-9]+/g, '');
-  return `${localPart}@${domain}.com`;
-}
-
-function gmailComposeLink(contact: (typeof outreachContacts)[number], email: string) {
-  const subject = `Referral request — ${contact.company}`;
-  return `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(contact.emailDraft)}`;
-}
-
-function OutreachRow({ contact, onCopy }: { contact: (typeof outreachContacts)[number]; onCopy: (text: string) => void }) {
-  const email = contact.emailInferred ? inferEmail(contact) : null;
-  return <article className="contact"><div><div className="contact-name">{contact.name}</div><div className="contact-meta">{contact.role}<br/>{contact.company}</div></div><div className="contact-meta"><a className="contact-profile" href={contact.profileUrl} target="_blank" rel="noreferrer">View profile</a>{email ? <><span className="inferred-email mono">{email}</span><span className="inferred">Inferred, unverified — verify before sending</span></> : <span className="contact-note">No inferred email</span>}</div><div className="draft">{contact.emailDraft}</div><div className="contact-actions">{email && <a className="btn primary" href={gmailComposeLink(contact, email)} target="_blank" rel="noreferrer">Open Gmail</a>}<button className="btn" onClick={() => onCopy(contact.emailDraft)}>Copy draft</button></div></article>;
-}
+function inferEmail(contact: (typeof outreachContacts)[number]) { return `${contact.name.toLowerCase().replace(/[^a-z]+/g, '.').replace(/^\.|\.$/g, '')}@${contact.company.toLowerCase().replace(/[^a-z0-9]+/g, '')}.com`; }
+function gmailComposeLink(contact: (typeof outreachContacts)[number], email: string) { return `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(email)}&su=${encodeURIComponent(`Referral request — ${contact.company}`)}&body=${encodeURIComponent(contact.emailDraft)}`; }
+function OutreachRow({ contact, onCopy }: { contact: (typeof outreachContacts)[number]; onCopy: (text: string) => void }) { const email = contact.emailInferred ? inferEmail(contact) : null; return <article className="contact"><div><div className="contact-name">{contact.name}</div><div className="contact-meta">{contact.role}<br/>{contact.company}</div></div><div className="contact-meta"><a className="contact-profile" href={contact.profileUrl} target="_blank" rel="noreferrer">View profile</a>{email ? <><span className="inferred-email mono">{email}</span><span className="inferred">Inferred, unverified — verify before sending</span></> : <span className="contact-note">No inferred email</span>}</div><div className="draft">{contact.emailDraft}</div><div className="contact-actions">{email && <a className="btn primary" href={gmailComposeLink(contact, email)} target="_blank" rel="noreferrer">Open Gmail</a>}<button className="btn" onClick={() => onCopy(contact.emailDraft)}>Copy draft</button></div></article>; }
