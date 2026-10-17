@@ -79,21 +79,48 @@ export default function Welcome() {
 }
 
 function HomeScreen({ onSignIn }: { onSignIn: () => void }) {
-  return <section className="welcome-main"><div><h1>A better morning<br/>job search.</h1><p>Signal finds roles worth your time, turns the best ones into thoughtful outreach, and helps you follow through without losing your place.</p><div className="welcome-capabilities" aria-label="What Signal does"><span>Ranked job discovery</span><span>Referral messages</span><span>Contact research</span><span>Gmail-ready outreach</span><span>Saved &amp; later queues</span></div><div className="welcome-actions"><button className="welcome-google" onClick={onSignIn}><GoogleIcon/>Continue with Google</button><Link className="welcome-guest" href="/?demo=1">Try the guided demo</Link></div><p className="welcome-footnote">Guest mode uses sample roles and saves progress only on this device.</p></div><SignalLoopPanel/></section>;
+  return <section className="welcome-main"><div><h1>A better morning<br/>job search.</h1><p>Signal finds roles worth your time, turns the best ones into thoughtful outreach, and helps you follow through without losing your place.</p><div className="welcome-capabilities" aria-label="What Signal does"><span>Ranked job discovery</span><span>Referral messages</span><span>Contact research</span><span>Gmail-ready outreach</span><span>Saved &amp; later queues</span></div><div className="welcome-actions"><button className="welcome-google" onClick={onSignIn}><GoogleIcon/>Continue with Google</button><Link className="welcome-guest" href="/?demo=1">Try the guided demo</Link></div><p className="welcome-footnote">Guest mode uses sample roles and saves progress only on this device.</p></div><SignalRelayPanel/></section>;
 }
 
-function SignalLoopPanel() {
+function SignalRelayPanel() {
   const panelRef = useRef<HTMLElement>(null);
-  const [entered, setEntered] = useState(false);
+  const stageRefs = useRef<Array<HTMLElement | null>>([]);
+  const [inView, setInView] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(false);
+  const [activeStage, setActiveStage] = useState(0);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
   useEffect(() => {
     const panel = panelRef.current;
     if (!panel) return;
-    if (!('IntersectionObserver' in window)) { setEntered(true); return; }
-    const observer = new IntersectionObserver(([entry]) => { if (entry.isIntersecting) { setEntered(true); observer.disconnect(); } }, { threshold: .35 });
+    if (!('IntersectionObserver' in window)) { setInView(true); return; }
+    const observer = new IntersectionObserver(([entry]) => setInView(entry.isIntersecting), { threshold: .35 });
     observer.observe(panel);
     return () => observer.disconnect();
   }, []);
-  return <aside ref={panelRef} className={`welcome-steps ${entered ? 'signal-loop-entered' : ''}`}><h2>Built for the whole loop.</h2><div><span>Jobs</span><strong>Find roles worth your time</strong><p>Fresh backend roles are ranked with fit notes, salary, experience, and a direct application path.</p></div><div><span>Outreach</span><strong>Turn interest into a real note</strong><p>Find the right person, personalize a referral message, or open an inferred-email draft in Gmail.</p></div><div><span>Momentum</span><strong>Keep your search moving</strong><p>Mark progress, save a role for later, or snooze it until tomorrow morning.</p></div></aside>;
+  useEffect(() => { const query = window.matchMedia('(prefers-reduced-motion: reduce)'); const update = () => setReducedMotion(query.matches); update(); query.addEventListener('change', update); return () => query.removeEventListener('change', update); }, []);
+  useEffect(() => {
+    const panel = panelRef.current;
+    const stage = stageRefs.current[activeStage];
+    if (!panel || !stage) return;
+    const placeRelay = () => {
+      const panelBox = panel.getBoundingClientRect();
+      const labelBox = stage.querySelector('.relay-stage-label')?.getBoundingClientRect();
+      if (!labelBox) return;
+      setPosition({ x: labelBox.left - panelBox.left + labelBox.width / 2, y: labelBox.top - panelBox.top + labelBox.height / 2 });
+    };
+    placeRelay();
+    window.addEventListener('resize', placeRelay);
+    return () => window.removeEventListener('resize', placeRelay);
+  }, [activeStage]);
+  useEffect(() => {
+    if (!inView || reducedMotion) { setActiveStage(0); return; }
+    let interval = window.setInterval(() => setActiveStage((current) => (current + 1) % 3), 1700);
+    const onVisibility = () => { window.clearInterval(interval); if (!document.hidden) interval = window.setInterval(() => setActiveStage((current) => (current + 1) % 3), 1700); };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => { window.clearInterval(interval); document.removeEventListener('visibilitychange', onVisibility); };
+  }, [inView, reducedMotion]);
+  const stages = [['Jobs', 'Find roles worth your time', 'Fresh backend roles are ranked with fit notes, salary, experience, and a direct application path.'], ['Outreach', 'Turn interest into a real note', 'Find the right person, personalize a referral message, or open an inferred-email draft in Gmail.'], ['Momentum', 'Keep your search moving', 'Mark progress, save a role for later, or snooze it until tomorrow morning.']];
+  return <aside ref={panelRef} className="welcome-steps relay-panel"><span className="relay-track" aria-hidden="true"/><span className="relay-marker" aria-hidden="true" style={{ transform: `translate(${position.x}px, ${position.y}px) translate(-50%, -50%)` }}/><h2>Built for the whole loop.</h2>{stages.map(([label, title, copy], index) => <div className={`relay-stage ${activeStage === index ? 'is-active' : ''}`} ref={(element) => { stageRefs.current[index] = element; }} key={label}><span className="relay-stage-label">{label}</span><div><strong>{title}</strong><p>{copy}</p></div></div>)}</aside>;
 }
 
 function SignInScreen({ notice, configured, onGoogle }: { notice: string; configured: boolean; onGoogle: () => void; onPreview?: () => void }) {
