@@ -284,6 +284,15 @@ function QueueSkeleton() { return <section id="workspace-content" className="que
 type ActionsProps = { job: Job; view: Exclude<View, 'outreach'>; saved: boolean; onCopy: (text: string) => void; onNeedName: () => void; onStatus: (id: string, status: Job['status']) => void; onSave: (id: string) => void; onSnooze: (id: string) => void; onUnsnooze: (id: string) => void; };
 function JobActions({ job, view, saved, onCopy, onNeedName, onStatus, onSave, onSnooze, onUnsnooze }: ActionsProps) {
   const [contactName, setContactName] = useState('');
+  useEffect(() => {
+    const closeMenuAfterAction = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      const menu = target.closest<HTMLDetailsElement>('.action-menu');
+      if (menu && target.closest('button')) menu.open = false;
+    };
+    document.addEventListener('click', closeMenuAfterAction);
+    return () => document.removeEventListener('click', closeMenuAfterAction);
+  }, []);
   const needsName = job.referralMessage.includes('{Name}');
   const copyMessage = () => { if (needsName && !contactName.trim()) { onNeedName(); return; } onCopy(job.referralMessage.replaceAll('{Name}', contactName.trim())); };
   return <><div className="actions"><button className="btn primary" onClick={copyMessage}>Copy message</button><a className="btn" href={contactsSearchLink(job)} target="_blank" rel="noreferrer">Find a person</a><a className="btn" href={job.applyLink} target="_blank" rel="noreferrer">Apply ↗</a><details className="action-menu"><summary>More</summary><div><button onClick={() => onStatus(job.id, 'Applied')}>I applied</button><button onClick={() => onSave(job.id)}>{saved ? 'Move to Today' : 'Save for later'}</button>{view === 'later' ? <button onClick={() => onUnsnooze(job.id)}>Bring back today</button> : <button onClick={() => onSnooze(job.id)}>Snooze until tomorrow</button>}<button onClick={() => onStatus(job.id, 'Rejected')}>Not a fit</button></div></details></div>{needsName && <label className="contact-name-input">Contact first name <input value={contactName} onChange={(event) => setContactName(event.target.value)} placeholder="e.g. Priya"/> <span>Required before copying.</span></label>}</>;
