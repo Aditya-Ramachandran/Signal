@@ -17,6 +17,7 @@ type StoredStatuses = Record<string, Job['status']>;
 type BridgeResponse = { ok?: boolean; jobs?: Record<string, unknown>[]; error?: string };
 type ProgressRow = { job_id: string; status: Job['status']; saved: boolean; snoozed_until: string | null };
 type WorkspaceStatus = 'checking' | 'ready' | 'needs-setup' | 'unavailable';
+type ProgressSyncState = 'idle' | 'syncing' | 'synced' | 'error';
 
 const STATUS_STORAGE_KEY = 'signal-job-statuses';
 const META_STORAGE_KEY = 'signal-job-meta';
@@ -103,6 +104,8 @@ function Dashboard() {
   const [workspaceStatus, setWorkspaceStatus] = useState<WorkspaceStatus>('checking');
   const [jobsFeedUrl, setJobsFeedUrl] = useState('');
   const [remoteProgressReady, setRemoteProgressReady] = useState(false);
+  const [liveJobsLoaded, setLiveJobsLoaded] = useState(false);
+  const [progressSyncState, setProgressSyncState] = useState<ProgressSyncState>('idle');
   const [progressUserId, setProgressUserId] = useState('');
   const [progressScope, setProgressScope] = useState<'device' | 'account'>('device');
   const [accountEmail, setAccountEmail] = useState('');
@@ -147,13 +150,14 @@ function Dashboard() {
     if (!hasRestoredProgress || !routeReady) return;
     const client = supabase;
     if (isGuestDemo || !client) { setRemoteProgressReady(true); return; }
+    if (!liveJobsLoaded) return;
     let cancelled = false;
     const restoreAccountProgress = async () => {
       const { data: { user } } = await client.auth.getUser();
       if (!user || cancelled) { setRemoteProgressReady(true); return; }
       const { data, error } = await client.from('job_progress').select('job_id,status,saved,snoozed_until');
       if (cancelled) return;
-      if (error) { setRemoteProgressReady(true); return; }
+      if (error) { setProgressSyncState('error'); setRemoteProgressReady(true); return; }
       const rows = (data || []) as ProgressRow[];
       const byJob = new Map(rows.map((row) => [row.job_id, row]));
       setJobState((items) => items.map((job) => { const row = byJob.get(job.id); return { ...job, status: row ? row.status : 'New' }; }));
@@ -164,17 +168,29 @@ function Dashboard() {
     };
     void restoreAccountProgress();
     return () => { cancelled = true; };
-  }, [hasRestoredProgress, isGuestDemo, routeReady]);
+  }, [hasRestoredProgress, isGuestDemo, liveJobsLoaded, routeReady]);
   useEffect(() => {
     const client = supabase;
-    if (!hasRestoredProgress || !remoteProgressReady || !progressUserId || isGuestDemo || workspaceStatus !== 'ready' || !client) return;
+    if (!hasRestoredProgress || !liveJobsLoaded || !remoteProgressReady || !progressUserId || isGuestDemo || workspaceStatus !== 'ready' || !client) return;
     const rows = jobState.map((job) => ({ user_id: progressUserId, job_id: job.id, status: job.status, saved: Boolean(jobMeta[job.id]?.saved), snoozed_until: jobMeta[job.id]?.snoozedUntil || null, updated_at: new Date().toISOString() }));
-    void client.from('job_progress').upsert(rows, { onConflict: 'user_id,job_id' });
-  }, [hasRestoredProgress, isGuestDemo, jobMeta, jobState, progressUserId, remoteProgressReady, workspaceStatus]);
+    if (!rows.length) return;
+    let cancelled = false;
+    const syncProgress = async () => {
+      setProgressSyncState('syncing');
+      const { error } = await client.from('job_progress').upsert(rows, { onConflict: 'user_id,job_id' });
+      if (cancelled) return;
+      setProgressSyncState(error ? 'error' : 'synced');
+      if (error) announce('Progress could not sync. Refresh and try again.');
+    };
+    void syncProgress();
+    return () => { cancelled = true; };
+  }, [hasRestoredProgress, isGuestDemo, jobMeta, jobState, liveJobsLoaded, progressUserId, remoteProgressReady, workspaceStatus]);
 
   const loadLiveJobs = async () => {
     if (new URLSearchParams(window.location.search).has('demo') || !jobsFeedUrl) return false;
     setIsLoadingJobs(true);
+    setLiveJobsLoaded(false);
+    setRemoteProgressReady(false);
     try {
       const response = await fetch(jobsFeedUrl, { cache: 'no-store' });
       const payload = await response.json() as BridgeResponse;
@@ -182,19 +198,28 @@ function Dashboard() {
       if (!response.ok || !liveJobs.length) throw new Error(payload.error || 'No jobs returned');
       setJobState(isAccountRoute() ? liveJobs : withSavedStatuses(liveJobs));
       return true;
-    } catch { announce('Your jobs feed is unavailable. Check the setup guide, then try again.'); setJobState([]); return false; } finally { setIsLoadingJobs(false); }
+    } catch { announce('Your jobs feed is unavailable. Check the setup guide, then try again.'); setJobState([]); return false; } finally { setIsLoadingJobs(false); setLiveJobsLoaded(true); }
   };
   useEffect(() => { if (routeReady && !isGuestDemo && workspaceStatus === 'ready' && jobsFeedUrl) void loadLiveJobs(); }, [isGuestDemo, jobsFeedUrl, routeReady, workspaceStatus]);
 
   const workspaceJobs = workspaceStatus === 'ready' ? jobState : [];
-  const todayJobs = useMemo(() => workspaceJobs.filter((job) => job.status !== 'Rejected' && !jobMeta[job.id]?.saved && !isSnoozed(jobMeta[job.id])), [jobMeta, workspaceJobs]);
+  const actionQueue = useMemo(() => workspaceJobs.filter((job) => job.status !== 'Rejected' && !jobMeta[job.id]?.saved && !isSnoozed(jobMeta[job.id])), [jobMeta, workspaceJobs]);
+  const todayJobs = useMemo(() => actionQueue.filter((job) => job.status === 'New'), [actionQueue]);
+  const appliedJobs = useMemo(() => actionQueue.filter((job) => job.status === 'Applied'), [actionQueue]);
+  const referredJobs = useMemo(() => actionQueue.filter((job) => job.status === 'Referred'), [actionQueue]);
   const savedJobs = useMemo(() => workspaceJobs.filter((job) => job.status !== 'Rejected' && jobMeta[job.id]?.saved && !isSnoozed(jobMeta[job.id])), [jobMeta, workspaceJobs]);
   const laterJobs = useMemo(() => workspaceJobs.filter((job) => isSnoozed(jobMeta[job.id])), [jobMeta, workspaceJobs]);
   const activeJobs = activeView === 'saved' ? savedJobs : activeView === 'later' ? laterJobs : todayJobs;
   // Outreach is real only when a user's pipeline supplies it. Sample contacts belong to guest demo only.
   const workspaceOutreach = isGuestDemo ? outreachContacts : [];
   const hasOutreach = workspaceOutreach.length > 0;
-  const filteredJobs = useMemo(() => activeJobs.filter((job) => activeView !== 'today' || filter === 'All' || (filter === 'A' && job.tier === 'A') || (filter === 'B' && job.tier === 'B') || job.status === filter), [activeJobs, activeView, filter]);
+  const filteredJobs = useMemo(() => {
+    if (activeView !== 'today') return activeJobs;
+    if (filter === 'Applied') return appliedJobs;
+    if (filter === 'Referred') return referredJobs;
+    if (filter === 'A' || filter === 'B') return todayJobs.filter((job) => job.tier === filter);
+    return todayJobs;
+  }, [activeJobs, activeView, appliedJobs, filter, referredJobs, todayJobs]);
   const lead = filteredJobs[0];
   const queuedJobs = lead ? filteredJobs.filter((job) => job.id !== lead.id) : [];
   const newToday = workspaceJobs.filter((job) => job.dateFound === briefingDate);
@@ -232,7 +257,7 @@ function Dashboard() {
   const chooseView = (view: View) => { setActiveView(view); setFilter('All'); setExpandedId(null); moveToWorkspace(); };
   const chooseFilter = (nextFilter: Filter) => { setFilter(nextFilter); setExpandedId(null); moveToWorkspace(); };
   const motionProps = reducedMotion ? {} : { initial: { opacity: 0, y: 14 }, animate: { opacity: 1, y: 0 }, transition: { duration: .35, ease: 'easeOut' as const } };
-  const showQueueSkeleton = !isGuestDemo && (workspaceStatus === 'checking' || (isLoadingJobs && workspaceStatus === 'ready'));
+  const showQueueSkeleton = !isGuestDemo && (workspaceStatus === 'checking' || (workspaceStatus === 'ready' && (isLoadingJobs || !liveJobsLoaded || !remoteProgressReady)));
 
   return <main className="shell">
     <header className="masthead"><div className="brand"><SignalMark/><div><div className="wordmark">Signal</div><div className="tagline">Less noise. More signal.</div></div></div><div className="mast-actions"><span className="date mono">SAT, 17 OCT 2026</span><button className="theme-toggle" aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}><span aria-hidden="true">{theme === 'dark' ? '☀️' : '🌙'}</span></button><button className="refresh" onClick={refresh}>Refresh queue</button>{!isGuestDemo && <details className="account-menu"><summary aria-label={accountEmail ? `Account menu for ${accountEmail}` : 'Open account menu'} title={accountEmail ? `Account: ${accountEmail}` : 'Open account menu'}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M4.75 20c.85-4 3.23-6 7.25-6s6.4 2 7.25 6"/></svg></summary><div className="account-menu-panel"><span className="account-menu-label">Private workspace</span><span className="account-menu-email" title={accountEmail}>{accountEmail || 'Your account'}</span><button onClick={signOut}>Sign out</button></div></details>}</div></header>
