@@ -10,7 +10,6 @@ import SignalMark from '../components/SignalMark';
 
 type Screen = 'home' | 'sign-in' | 'setup';
 type AuthState = 'checking' | 'signed-out' | 'allowed' | 'denied' | 'error';
-type WaitlistState = 'idle' | 'pending' | 'submitting' | 'error';
 
 function GoogleIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.6 12.23c0-.71-.06-1.39-.18-2.05H12v3.88h5.38a4.6 4.6 0 0 1-2 3.02v2.52h3.24c1.9-1.75 2.98-4.34 2.98-7.37Z"/><path fill="#34A853" d="M12 22c2.7 0 4.96-.9 6.62-2.4l-3.24-2.52c-.9.6-2.05.96-3.38.96-2.6 0-4.8-1.76-5.58-4.12H3.08v2.6A10 10 0 0 0 12 22Z"/><path fill="#FBBC05" d="M6.42 13.92A6.02 6.02 0 0 1 6.1 12c0-.67.12-1.31.32-1.92v-2.6H3.08A10 10 0 0 0 2 12c0 1.61.39 3.14 1.08 4.52l3.34-2.6Z"/><path fill="#EA4335" d="M12 5.96c1.45 0 2.75.5 3.77 1.48l2.82-2.82C16.95 3.1 14.7 2 12 2a10 10 0 0 0-8.92 5.48l3.34 2.6C7.2 7.72 9.4 5.96 12 5.96Z"/></svg>; }
 
@@ -29,7 +28,6 @@ export default function Welcome() {
   const [authState, setAuthState] = useState<AuthState>('checking');
   const [accountEmail, setAccountEmail] = useState('');
   const [accountUserId, setAccountUserId] = useState('');
-  const [waitlistState, setWaitlistState] = useState<WaitlistState>('idle');
   const endpointLooksValid = /^https:\/\/.+/.test(endpoint.trim());
 
   useEffect(() => { if (window.localStorage.getItem('signal-theme') === 'dark') setTheme('dark'); }, []);
@@ -38,15 +36,13 @@ export default function Welcome() {
     const client = supabase;
     if (!client) { setAuthState('error'); return; }
     const applySession = async (session: Session | null) => {
-      if (!session?.user.email) { setAccountEmail(''); setAccountUserId(''); setWaitlistState('idle'); setAuthState('signed-out'); return; }
+      if (!session?.user.email) { setAccountEmail(''); setAccountUserId(''); setAuthState('signed-out'); return; }
       const email = session.user.email.toLowerCase();
       setAccountEmail(email);
       setAccountUserId(session.user.id);
       const { data, error } = await client.from('allowed_users').select('email').eq('email', email).maybeSingle();
       if (error) { setAuthState('error'); return; }
       if (data) { if (new URLSearchParams(window.location.search).has('setup')) { setSetupStep(1); setScreen('setup'); } setAuthState('allowed'); return; }
-      const request = await client.from('waitlist_requests').select('user_id').eq('user_id', session.user.id).maybeSingle();
-      setWaitlistState(request.error ? 'error' : request.data ? 'pending' : 'idle');
       setAuthState('denied');
     };
     void client.auth.getSession().then(({ data }) => applySession(data.session));
@@ -60,14 +56,8 @@ export default function Welcome() {
     const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: `${window.location.origin}${basePath}` } });
     if (error) setNotice(`Could not start Google sign-in: ${error.message}`);
   };
-  const signOut = async () => { await supabase?.auth.signOut(); setAccountEmail(''); setAccountUserId(''); setWaitlistState('idle'); setAuthState('signed-out'); goHome(); };
+  const signOut = async () => { await supabase?.auth.signOut(); setAccountEmail(''); setAccountUserId(''); setAuthState('signed-out'); goHome(); };
   const openWorkspace = () => { const basePath = window.location.hostname.endsWith('github.io') ? '/Signal/' : '/'; window.location.assign(`${basePath}?app=1`); };
-  const joinWaitlist = async () => {
-    if (!supabase || !accountUserId || !accountEmail) return;
-    setWaitlistState('submitting');
-    const { error } = await supabase.from('waitlist_requests').insert({ user_id: accountUserId, email: accountEmail });
-    setWaitlistState(error ? 'error' : 'pending');
-  };
   const finishSetup = async () => {
     if (!supabase || !accountUserId) { setNotice('Sign in with an invited Google account to save this workspace.'); return; }
     const { error } = await supabase.from('user_settings').upsert({ user_id: accountUserId, target_roles: roles.trim(), preferred_locations: locations.trim(), jobs_feed_url: endpoint.trim(), updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
@@ -78,17 +68,17 @@ export default function Welcome() {
   return <main className="welcome-shell">
     <Header theme={theme} onTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')} onHome={goHome}/>
     <MobileDesktopNote/>
-    {authState === 'allowed' ? (screen === 'setup' ? <SetupScreen step={setupStep} roles={roles} locations={locations} endpoint={endpoint} endpointLooksValid={endpointLooksValid} notice={notice} onRoles={setRoles} onLocations={setLocations} onEndpoint={(value) => { setEndpoint(value); setNotice(''); }} onNext={() => { if (setupStep === 2 && !endpointLooksValid) { setNotice('Paste the public read-only URL from your Apps Script bridge to continue.'); return; } setNotice(''); setSetupStep(Math.min(setupStep + 1, 3)); }} onBack={() => setupStep === 1 ? setScreen('home') : setSetupStep(setupStep - 1)} onFinish={finishSetup} /> : <SignedInScreen email={accountEmail} onOpen={openWorkspace} onSetup={() => { setNotice(''); setSetupStep(1); setScreen('setup'); }} onSignOut={signOut}/>) : authState === 'denied' ? <DeniedScreen email={accountEmail} state={waitlistState} onJoin={joinWaitlist} onSignOut={signOut}/> : <>{screen === 'home' && <HomeScreen onSignIn={() => setScreen('sign-in')}/>} {screen === 'sign-in' && <SignInScreen notice={notice} configured={isSupabaseConfigured} onGoogle={signIn} onPreview={() => { setNotice(''); setScreen('setup'); }}/>} {screen === 'setup' && <SetupScreen step={setupStep} roles={roles} locations={locations} endpoint={endpoint} endpointLooksValid={endpointLooksValid} notice={notice} onRoles={setRoles} onLocations={setLocations} onEndpoint={(value) => { setEndpoint(value); setNotice(''); }} onNext={() => { if (setupStep === 2 && !endpointLooksValid) { setNotice('Paste the public read-only URL from your Apps Script bridge to continue.'); return; } setNotice(''); setSetupStep(Math.min(setupStep + 1, 3)); }} onBack={() => setupStep === 1 ? setScreen('sign-in') : setSetupStep(setupStep - 1)} onFinish={() => setNotice('Setup preview complete. Sign in with Google after Supabase is connected to save this workspace.')} />}</>}
+    {authState === 'allowed' ? (screen === 'setup' ? <SetupScreen step={setupStep} roles={roles} locations={locations} endpoint={endpoint} endpointLooksValid={endpointLooksValid} notice={notice} onRoles={setRoles} onLocations={setLocations} onEndpoint={(value) => { setEndpoint(value); setNotice(''); }} onNext={() => { if (setupStep === 2 && !endpointLooksValid) { setNotice('Paste the public read-only URL from your Apps Script bridge to continue.'); return; } setNotice(''); setSetupStep(Math.min(setupStep + 1, 3)); }} onBack={() => setupStep === 1 ? setScreen('home') : setSetupStep(setupStep - 1)} onFinish={finishSetup} /> : <SignedInScreen email={accountEmail} onOpen={openWorkspace} onSetup={() => { setNotice(''); setSetupStep(1); setScreen('setup'); }} onSignOut={signOut}/>) : authState === 'denied' ? <DeniedScreen email={accountEmail} onSignOut={signOut}/> : <>{screen === 'home' && <HomeScreen onSignIn={() => setScreen('sign-in')}/>} {screen === 'sign-in' && <SignInScreen notice={notice} configured={isSupabaseConfigured} onGoogle={signIn}/>} {screen === 'setup' && <SetupScreen step={setupStep} roles={roles} locations={locations} endpoint={endpoint} endpointLooksValid={endpointLooksValid} notice={notice} onRoles={setRoles} onLocations={setLocations} onEndpoint={(value) => { setEndpoint(value); setNotice(''); }} onNext={() => { if (setupStep === 2 && !endpointLooksValid) { setNotice('Paste the public read-only URL from your Apps Script bridge to continue.'); return; } setNotice(''); setSetupStep(Math.min(setupStep + 1, 3)); }} onBack={() => setupStep === 1 ? setScreen('sign-in') : setSetupStep(setupStep - 1)} onFinish={() => setNotice('Setup preview complete. Sign in with Google after Supabase is connected to save this workspace.')} />}</>}
     <SignalFooter/>
   </main>;
 }
 
 function HomeScreen({ onSignIn }: { onSignIn: () => void }) {
-  return <section className="welcome-main"><div><h1>A better morning<br/>job search.</h1><p>Signal finds roles worth your time, turns the best ones into thoughtful outreach, and helps you follow through without losing your place.</p><div className="welcome-capabilities" aria-label="What Signal does"><span>Ranked job discovery</span><span>Referral messages</span><span>Contact research</span><span>Gmail-ready outreach</span><span>Saved &amp; later queues</span></div><div className="welcome-actions"><button className="welcome-google" onClick={onSignIn}><GoogleIcon/>Continue with Google</button><Link className="welcome-guest" href="/?demo=1">Try the guided demo</Link></div><p className="welcome-footnote">Guest mode uses sample roles and saves progress only on this device.</p></div><WelcomePreview/></section>;
+  return <section className="welcome-main"><div><h1>A better morning<br/>job search.</h1><p>Signal finds roles worth your time, turns the best ones into thoughtful outreach, and helps you follow through without losing your place.</p><div className="welcome-capabilities" aria-label="What Signal does"><span>Ranked job discovery</span><span>Referral messages</span><span>Contact research</span><span>Gmail-ready outreach</span><span>Saved &amp; later queues</span></div><div className="welcome-actions"><Link className="welcome-google" href="/?demo=1">Try the guided demo</Link><button className="welcome-guest" onClick={onSignIn}>Sign in to your workspace</button></div><p className="welcome-footnote">The demo uses sample roles. Your private workspace stays behind Google sign-in.</p></div><WelcomePreview/></section>;
 }
 
 function WelcomePreview() {
-  return <aside className="welcome-preview" aria-label="Signal product preview"><div className="welcome-preview-visual"><img className="welcome-preview-motion" src="/Signal/assets/signal-intro.gif" alt="Signal turns a ranked job lead into a referral note and a clear next action."/><img className="welcome-preview-still" src="/Signal/assets/signal-intro-still.png" alt="" aria-hidden="true"/></div><div className="welcome-preview-caption"><p>Read the lead. Make the move. Leave lighter.</p><Link href="/?demo=1">Open the sample queue <span aria-hidden="true">→</span></Link></div></aside>;
+  return <aside className="welcome-preview" aria-label="Signal product preview"><div className="welcome-preview-visual"><img className="welcome-preview-motion" src="/Signal/assets/signal-intro.gif" alt="Signal turns a ranked job lead into a referral note and a clear next action."/><img className="welcome-preview-still" src="/Signal/assets/signal-intro-still.png" alt="" aria-hidden="true"/></div><div className="welcome-preview-caption"><p>Read the lead. Make the move. Leave lighter.</p></div></aside>;
 }
 
 function SignalRelayPanel() {
@@ -132,12 +122,12 @@ function SignalRelayPanel() {
   return <aside ref={panelRef} className="welcome-steps relay-panel"><span className="relay-track" aria-hidden="true"/><span className="relay-marker" aria-hidden="true" style={{ transform: `translate(${position.x}px, ${position.y}px) translate(-50%, -50%)` }}/><h2>Built for the whole loop.</h2>{stages.map(([label, title, copy], index) => <div className={`relay-stage ${activeStage === index ? 'is-active' : ''}`} ref={(element) => { stageRefs.current[index] = element; }} key={label}><span className="relay-stage-label">{label}</span><div><strong>{title}</strong><p>{copy}</p></div></div>)}</aside>;
 }
 
-function SignInScreen({ notice, configured, onGoogle }: { notice: string; configured: boolean; onGoogle: () => void; onPreview?: () => void }) {
+function SignInScreen({ notice, configured, onGoogle }: { notice: string; configured: boolean; onGoogle: () => void }) {
   return <section className="account-flow"><div className="account-copy"><h1>Your Signal stays yours.</h1><p>Sign in to keep a private queue, connect your own pipeline, and pick up your job search from any device.</p><p className="account-detail">Access is by invitation. Your Google identity opens your workspace; it never gives Signal access to your Gmail or Sheets.</p></div><div className="account-panel"><h2>Sign in to your workspace</h2><button className="welcome-google google-auth" onClick={onGoogle} disabled={!configured}><GoogleIcon/>Continue with Google</button>{!configured && <p className="welcome-notice" role="status">Supabase configuration is not available in this build.</p>}{notice && <p className="welcome-notice" role="status">{notice}</p>}<p className="account-help">Want to explore first? <Link href="/?demo=1">Open the guided demo.</Link><br/><Link href="/guide">Read the self-hosted setup guide</Link></p></div></section>;
 }
 
 function SignedInScreen({ email, onOpen, onSetup, onSignOut }: { email: string; onOpen: () => void; onSetup: () => void; onSignOut: () => void }) { return <section className="account-flow"><div className="account-copy"><h1>Your workspace is yours.</h1><p>You are signed in as {email}. Your jobs feed and job-search progress are private to this Google account.</p></div><div className="account-panel"><h2>Welcome back</h2><button className="welcome-google google-auth" onClick={onOpen}>Open Signal</button><button className="welcome-guest preview-button" onClick={onSetup}>Connect or edit jobs feed</button><button className="text-action account-signout" onClick={onSignOut}>Sign out</button></div></section>; }
-function DeniedScreen({ email, state, onJoin, onSignOut }: { email: string; state: WaitlistState; onJoin: () => void; onSignOut: () => void }) { const pending = state === 'pending'; return <section className="account-flow"><div className="account-copy"><h1>{pending ? 'You’re on the early list.' : 'Signal is opening gradually.'}</h1><p>{pending ? <>We’ve saved <strong>{email}</strong> as the Google account to invite.</> : <>You’re signed in as <strong>{email}</strong>. Join the early list and we’ll know which account to approve when Signal opens up.</>}</p></div><div className="account-panel waitlist-panel"><h2>{pending ? 'Request received' : 'Get early access'}</h2><p className="account-help">{pending ? 'Your request is with the Signal owner. This account will work once you’re invited.' : 'No extra form, no password, and no inbox permissions. Just your verified Google account.'}</p>{pending ? <><span className="waitlist-confirmation">On the early list</span><div className="waitlist-demo"><span>Want to see what you’re waiting for?</span><Link className="welcome-guest" href="/?demo=1">Explore the guided demo</Link></div></> : <button className="welcome-google google-auth" onClick={onJoin} disabled={state === 'submitting'}>{state === 'submitting' ? 'Joining…' : 'Join the waitlist'}</button>}{state === 'error' && <p className="welcome-notice" role="status">We couldn’t add you just now. Please try again.</p>}<button className="text-action account-signout" onClick={onSignOut}>Use another Google account</button></div></section>; }
+function DeniedScreen({ email, onSignOut }: { email: string; onSignOut: () => void }) { return <section className="account-flow"><div className="account-copy"><h1>This workspace is private.</h1><p><strong>{email}</strong> is signed in, but it is not approved for this hosted Signal workspace.</p><p className="account-detail">Want your own? Fork Signal, connect your own jobs feed, and keep the whole workflow under your control.</p></div><div className="account-panel"><h2>Explore Signal your way</h2><Link className="welcome-google google-auth" href="/?demo=1">Explore the guided demo</Link><a className="welcome-guest preview-button" href="/guide">Set up your own Signal</a><button className="text-action account-signout" onClick={onSignOut}>Use another Google account</button></div></section>; }
 
 type SetupProps = { step: number; roles: string; locations: string; endpoint: string; endpointLooksValid: boolean; notice: string; onRoles: (value: string) => void; onLocations: (value: string) => void; onEndpoint: (value: string) => void; onNext: () => void; onBack: () => void; onFinish: () => void; };
 function SetupScreen({ step, roles, locations, endpoint, endpointLooksValid, notice, onRoles, onLocations, onEndpoint, onNext, onBack, onFinish }: SetupProps) {

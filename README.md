@@ -112,7 +112,7 @@ insert into public.allowed_users (email, note)
 values ('you@example.com', 'Owner');
 ```
 
-The schema enables Row Level Security. A signed-in user can access only their own settings and job-progress records. Uninvited Google accounts can request access through the waitlist screen.
+The schema enables Row Level Security. A signed-in user can access only their own settings and job-progress records. The hosted workspace remains private; everyone else can use the guided demo or follow the self-hosted setup guide.
 
 ## Connect a jobs feed
 
@@ -170,7 +170,7 @@ These values are safe to expose in the browser. Do not commit service-role keys,
 ```text
 app/
   page.tsx                 Dashboard and guest demo
-  welcome/page.tsx         Welcome, sign-in, waitlist, and workspace setup
+  welcome/page.tsx         Welcome, sign-in, and workspace setup
   guide/page.tsx           Self-hosted setup guide
   components/              Shared footer and mobile advisory
   globals.css              Shared visual system
