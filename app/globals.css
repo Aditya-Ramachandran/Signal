@@ -15,6 +15,12 @@ body { margin:0; background:var(--paper); color:var(--ink); font-family:var(--sa
 .account-panel .preview-button { margin:0; }
 .account-panel .account-help { margin:6px 0 0; }
 .account-panel .account-signout { margin:4px auto 0; }
+.account-choice { display:grid; gap:6px; padding:0 0 14px; border-bottom:1px solid var(--line); }
+.account-choice strong { font-size:15px; }
+.account-choice p { margin:0; color:var(--muted); font-size:13px; line-height:1.4; }
+.account-choice-email { overflow-wrap:anywhere; color:var(--ink); font-family:var(--mono); font-size:12px; }
+.account-choice .text-action { justify-self:start; margin-top:2px; }
+.account-demo { justify-self:center; margin-top:2px; }
 ::selection { background:var(--accent); color:white; }
 button,a,select { font:inherit; }
 button,a,select { -webkit-tap-highlight-color:transparent; }
