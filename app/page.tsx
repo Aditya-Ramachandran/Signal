@@ -34,7 +34,15 @@ function formatDate(value: string) { const date = new Date(`${value}T00:00:00`);
 function daysAgo(value: string) { const date = new Date(`${value}T00:00:00`); return Number.isNaN(date.getTime()) ? 0 : Math.max(0, Math.round((Date.now() - date.getTime()) / 86_400_000)); }
 function tomorrow() { const date = new Date(); date.setDate(date.getDate() + 1); return date.toISOString().slice(0, 10); }
 function isSnoozed(meta: JobMeta | undefined) { return Boolean(meta?.snoozedUntil && new Date(`${meta.snoozedUntil}T00:00:00`).getTime() > Date.now()); }
-function contactsSearchLink(job: Job) { return `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(`"${job.company}" AND ("engineering manager" OR "tech lead" OR recruiter)`)}`; }
+function contactsSearchLink(job: Job) { return `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(`"${job.company}"`)}`; }
+function jobContactsLink(job: Job) {
+  const savedLink = job.findContactsLink?.trim();
+  if (!savedLink || !/^https?:\/\//i.test(savedLink)) return contactsSearchLink(job);
+  try {
+    const url = new URL(savedLink);
+    return /(^|\.)linkedin\.com$/i.test(url.hostname) && url.searchParams.has('currentCompany') ? savedLink : contactsSearchLink(job);
+  } catch { return contactsSearchLink(job); }
+}
 function postedLabel(job: Job) { return job.postedDaysAgo === 0 ? 'posted today' : `posted ${job.postedDaysAgo} day${job.postedDaysAgo > 1 ? 's' : ''} ago`; }
 
 function jobsFromBridge(payload: BridgeResponse): Job[] {
@@ -295,7 +303,7 @@ function JobActions({ job, view, saved, onCopy, onNeedName, onStatus, onSave, on
   }, []);
   const needsName = job.referralMessage.includes('{Name}');
   const copyMessage = () => { if (needsName && !contactName.trim()) { onNeedName(); return; } onCopy(job.referralMessage.replaceAll('{Name}', contactName.trim())); };
-  return <><div className="actions"><button className="btn primary" onClick={copyMessage}>Copy message</button><a className="btn" href={contactsSearchLink(job)} target="_blank" rel="noreferrer">Find a person</a><a className="btn" href={job.applyLink} target="_blank" rel="noreferrer">Apply ↗</a><details className="action-menu"><summary>More</summary><div><button onClick={() => onStatus(job.id, 'Applied')}>I applied</button><button onClick={() => onSave(job.id)}>{saved ? 'Move to Today' : 'Save for later'}</button>{view === 'later' ? <button onClick={() => onUnsnooze(job.id)}>Bring back today</button> : <button onClick={() => onSnooze(job.id)}>Snooze until tomorrow</button>}<button onClick={() => onStatus(job.id, 'Rejected')}>Not a fit</button></div></details></div>{needsName && <label className="contact-name-input">Contact first name <input value={contactName} onChange={(event) => setContactName(event.target.value)} placeholder="e.g. Priya"/> <span>Required before copying.</span></label>}</>;
+  return <><div className="actions"><button className="btn primary" onClick={copyMessage}>Copy message</button><a className="btn" href={jobContactsLink(job)} target="_blank" rel="noreferrer" title={`Find people at ${job.company}`}>Find a person</a><a className="btn" href={job.applyLink} target="_blank" rel="noreferrer">Apply ↗</a><details className="action-menu"><summary>More</summary><div><button onClick={() => onStatus(job.id, 'Applied')}>I applied</button><button onClick={() => onSave(job.id)}>{saved ? 'Move to Today' : 'Save for later'}</button>{view === 'later' ? <button onClick={() => onUnsnooze(job.id)}>Bring back today</button> : <button onClick={() => onSnooze(job.id)}>Snooze until tomorrow</button>}<button onClick={() => onStatus(job.id, 'Rejected')}>Not a fit</button></div></details></div>{needsName && <label className="contact-name-input">Contact first name <input value={contactName} onChange={(event) => setContactName(event.target.value)} placeholder="e.g. Priya"/> <span>Required before copying.</span></label>}</>;
 }
 
 function LeadJob({ job, view, saved, messageOpen, onReviewMessage, ...actions }: ActionsProps & { messageOpen: boolean; onReviewMessage: () => void }) { return <article className={`lead tier-${job.tier.toLowerCase()}`}><div><div className="lead-kicker">{view === 'today' ? 'Best next move' : view === 'saved' ? 'Saved role' : 'Snoozed role'} · Tier {job.tier}</div><h2>{job.role}</h2><div className="company">{job.company}</div><div className="facts lead-facts"><span>{job.location}</span><span>{job.experience}</span><span>{job.salary}</span><span>{postedLabel(job)}</span></div></div><div className="lead-why"><p>{job.whyFit}</p><div className="facts"><span>{job.companySize}</span><span>Listing ref. {job.jobId}</span></div></div><div className="message"><div className="message-label">Referral message · {job.jobId}</div>{messageOpen ? <p>{job.referralMessage}</p> : <p className="message-preview">A tailored referral note is ready when you need it.</p>}{!messageOpen && <button className="review-note" onClick={onReviewMessage}>Review referral note</button>}<JobActions job={job} view={view} saved={saved} {...actions}/></div></article>; }
