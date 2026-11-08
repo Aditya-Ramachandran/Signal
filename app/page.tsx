@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from 'framer-motion';
 import { jobs as initialJobs, outreachContacts, type Job } from '../lib/sampleData';
@@ -23,6 +23,7 @@ type FeedHealth = { state: 'checking' | 'healthy' | 'unavailable' | 'demo'; jobC
 const STATUS_STORAGE_KEY = 'signal-job-statuses';
 const META_STORAGE_KEY = 'signal-job-meta';
 const LEAD_REVIEWED_KEY = 'signal-lead-reviewed';
+const APPLICATION_RETURN_KEY = 'signal-application-return';
 
 function readJson<T>(key: string, fallback: T): T {
   try { const value = window.localStorage.getItem(key); return value ? JSON.parse(value) as T : fallback; } catch { return fallback; }
@@ -153,6 +154,8 @@ function Dashboard() {
   const [progressScope, setProgressScope] = useState<'device' | 'account'>('device');
   const [accountEmail, setAccountEmail] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [applicationReturnId, setApplicationReturnId] = useState('');
+  const queueHeadingRef = useRef<HTMLHeadingElement>(null);
   const [feedHealth, setFeedHealth] = useState<FeedHealth>({ state: 'checking', jobCount: 0, lastRun: '' });
   const reducedMotion = useReducedMotion();
 
@@ -162,6 +165,12 @@ function Dashboard() {
   useEffect(() => { const guestDemo = new URLSearchParams(window.location.search).has('demo'); setIsGuestDemo(guestDemo); if (guestDemo) { setWorkspaceStatus('ready'); setIsLoadingJobs(false); setFeedHealth({ state: 'demo', jobCount: initialJobs.length, lastRun: '' }); } setLeadMessageOpen(!Boolean(window.localStorage.getItem(LEAD_REVIEWED_KEY))); setRouteReady(true); }, []);
   useEffect(() => { window.localStorage.setItem(LEAD_REVIEWED_KEY, 'true'); }, []);
   useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => { setToast(''); setUndoAction(null); }, 5000); return () => window.clearTimeout(timer); }, [toast]);
+  useEffect(() => {
+    const restore = () => setApplicationReturnId(window.localStorage.getItem(APPLICATION_RETURN_KEY) || '');
+    restore();
+    window.addEventListener('signal-application-opened', restore);
+    return () => window.removeEventListener('signal-application-opened', restore);
+  }, []);
   useEffect(() => {
     if (isGuestDemo || !supabase) return;
     let cancelled = false;
@@ -269,10 +278,14 @@ function Dashboard() {
   const queuedJobs = lead ? filteredJobs.filter((job) => job.id !== lead.id) : [];
   const queueSize = actionQueue.length;
   const actionedRoles = actionQueue.filter((job) => job.status !== 'New' || jobMeta[job.id]?.saved || isSnoozed(jobMeta[job.id])).length;
+  const returnedApplication = workspaceJobs.find((job) => job.id === applicationReturnId && job.status === 'New');
+  const restoreQueueFocus = () => window.setTimeout(() => queueHeadingRef.current?.focus(), 0);
 
   const setStatus = (id: string, status: Job['status']) => {
     const previous = jobState.find((job) => job.id === id)?.status || 'New';
     setJobState((items) => items.map((job) => job.id === id ? { ...job, status } : job));
+    if (status === 'Applied' && id === applicationReturnId) { window.localStorage.removeItem(APPLICATION_RETURN_KEY); setApplicationReturnId(''); }
+    restoreQueueFocus();
     const syncNote = progressScope === 'account' ? ' — syncing to your account' : ' on this device';
     const message = status === 'Applied' ? `Marked as applied${syncNote}` : status === 'Rejected' ? `Removed from your queue${syncNote}` : `Marked as ${status.toLowerCase()}${syncNote}`;
     announce(message, () => setJobState((items) => items.map((job) => job.id === id ? { ...job, status: previous } : job)));
@@ -281,11 +294,13 @@ function Dashboard() {
     const previous = jobMeta[id] || {};
     const next = !previous.saved;
     setJobMeta((items) => ({ ...items, [id]: { ...previous, saved: next } }));
+    restoreQueueFocus();
     announce(next ? (progressScope === 'account' ? 'Saved — syncing to your account' : 'Saved on this device') : 'Moved back to Today', () => setJobMeta((items) => ({ ...items, [id]: previous })));
   };
   const snooze = (id: string) => {
     const previous = jobMeta[id] || {};
     setJobMeta((items) => ({ ...items, [id]: { ...previous, snoozedUntil: tomorrow() } }));
+    restoreQueueFocus();
     announce(progressScope === 'account' ? 'Snoozed until tomorrow — syncing to your account' : 'Snoozed until tomorrow morning', () => setJobMeta((items) => ({ ...items, [id]: previous })));
   };
   const unsnooze = (id: string) => {
