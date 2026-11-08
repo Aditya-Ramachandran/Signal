@@ -1,0 +1,4 @@
+.env
+.signal-browser-profile/
+playwright-report/
+test-results/

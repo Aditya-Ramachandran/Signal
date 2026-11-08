@@ -1,3 +1,5 @@
+import path from 'node:path';
+
 const required = ['SUPABASE_URL', 'SUPABASE_SECRET_KEY'];
 
 export function runnerConfig(env = process.env, { needsSupabase = true } = {}) {
@@ -8,11 +10,16 @@ export function runnerConfig(env = process.env, { needsSupabase = true } = {}) {
   const maxSteps = Number(env.RUNNER_MAX_STEPS || 24);
   if (!Number.isInteger(maxSteps) || maxSteps < 1 || maxSteps > 100) throw new Error('RUNNER_MAX_STEPS must be a whole number between 1 and 100.');
 
+  const pollIntervalSeconds = Number(env.RUNNER_POLL_INTERVAL_SECONDS || 60);
+  if (!Number.isInteger(pollIntervalSeconds) || pollIntervalSeconds < 15 || pollIntervalSeconds > 900) throw new Error('RUNNER_POLL_INTERVAL_SECONDS must be a whole number between 15 and 900.');
+
   return {
     supabaseUrl: env.SUPABASE_URL || '',
     secretKey: env.SUPABASE_SECRET_KEY || '',
     runnerId: env.SIGNAL_RUNNER_ID?.trim() || 'local-rehearsal',
     maxSteps,
+    pollIntervalSeconds,
+    browserProfileDir: path.resolve(env.RUNNER_BROWSER_PROFILE_DIR?.trim() || '.signal-browser-profile'),
     headless: env.RUNNER_HEADLESS !== 'false',
   };
 }

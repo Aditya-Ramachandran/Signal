@@ -4,15 +4,15 @@ import path from 'node:path';
 
 const fixtureUrl = pathToFileURL(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../fixtures/workday-rehearsal.html')).href;
 
-export async function prepareFictionalWorkday(profileSnapshot, { maxSteps, headless }) {
+export async function prepareFictionalWorkday(profileSnapshot, { maxSteps, headless, browserProfileDir }) {
   let steps = 0;
   const takeStep = (name) => {
     steps += 1;
     if (steps > maxSteps) throw new Error(`Step limit reached before ${name}.`);
   };
-  const browser = await chromium.launch({ headless });
+  const context = await chromium.launchPersistentContext(browserProfileDir, { headless });
   try {
-    const page = await browser.newPage();
+    const page = context.pages()[0] || await context.newPage();
     takeStep('opening rehearsal form');
     await page.goto(fixtureUrl, { waitUntil: 'domcontentloaded' });
 
@@ -46,6 +46,6 @@ export async function prepareFictionalWorkday(profileSnapshot, { maxSteps, headl
 
     return { fixtureUrl, steps, filled, skipped, submitted: false };
   } finally {
-    await browser.close();
+    await context.close();
   }
 }

@@ -10,11 +10,13 @@ import {
   approveApplicationPreparation,
   createApplicationDraft,
   getApplicationProfile,
+  getApplicationRunnerHealth,
   getApplicationRequests,
   getResumes,
   saveApplicationProfile,
   uploadApplicationResume,
   type ApplicationRequestRecord,
+  type ApplicationRunnerHealth,
 } from '../../lib/signalApplyRepository';
 
 type LoadState = 'loading' | 'ready' | 'signed-out' | 'error';
@@ -74,6 +76,7 @@ export default function ApplyPage() {
   const [resumes, setResumes] = useState<ResumeRecord[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState('');
   const [requests, setRequests] = useState<ApplicationRequestRecord[]>([]);
+  const [runnerHealth, setRunnerHealth] = useState<ApplicationRunnerHealth | null>(null);
   const [userId, setUserId] = useState('');
   const [message, setMessage] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
@@ -89,13 +92,15 @@ export default function ApplyPage() {
     !profile.contact.email?.trim() ? 'email' : '',
     !profile.contact.phone?.trim() ? 'phone number' : '',
   ].filter(Boolean) : [];
+  const runnerStatus = runnerHealth?.state === 'online' ? 'Private runner online · rehearsal only' : runnerHealth?.state === 'working' ? 'Private runner preparing a rehearsal' : runnerHealth?.state === 'degraded' ? 'Private runner needs attention' : runnerHealth?.state === 'offline' ? 'Private runner offline' : '';
 
   const refreshWorkspace = async (id: string) => {
-    const [savedProfile, savedResumes, savedRequests] = await Promise.all([getApplicationProfile(id), getResumes(id), getApplicationRequests()]);
+    const [savedProfile, savedResumes, savedRequests, savedRunnerHealth] = await Promise.all([getApplicationProfile(id), getResumes(id), getApplicationRequests(), getApplicationRunnerHealth()]);
     setProfile(savedProfile ?? blankProfile(id));
     setResumes(savedResumes);
     setSelectedResumeId((current) => current || savedResumes.find((resume) => resume.isActive)?.id || savedResumes[0]?.id || '');
     setRequests(savedRequests);
+    setRunnerHealth(savedRunnerHealth);
   };
 
   useEffect(() => {
@@ -197,7 +202,7 @@ export default function ApplyPage() {
     {loadState === 'ready' && profile && <>
       <section className="apply-intro">
         <div><h1>{target ? 'Prepare this application.' : 'Prepare the right application.'}</h1><p>{target ? 'Review this role, choose your materials, and approve a safe rehearsal. You keep every final decision.' : 'Choose a role from your morning queue, then prepare one clear next step.'}</p></div>
-        <p className="apply-safety">No auto-submit. No CAPTCHA bypass. Sensitive answers stay with you.</p>
+        <div><p className="apply-safety">No auto-submit. No CAPTCHA bypass. Sensitive answers stay with you.</p>{runnerStatus && <p className={`apply-runner-health ${runnerHealth?.state}`} role="status"><span aria-hidden="true"/>{runnerStatus}</p>}</div>
       </section>
 
       {!target ? <section className="apply-empty"><h2>Choose a role first.</h2><p>From your morning queue, open a role and choose <strong>Prepare application</strong>. Signal will bring its application link and context here.</p><Link className="btn primary" href="/">Open your queue</Link></section> : <>

@@ -191,6 +191,7 @@ h2 { font-size:22px; letter-spacing:-.035em; margin:0; font-weight:600; }
 .apply-intro h1 { max-width:540px; margin:0; font-size:48px; letter-spacing:-.04em; line-height:.96; }
 .apply-intro p { max-width:590px; margin:16px 0 0; color:var(--muted); font-size:17px; line-height:1.45; }
 .apply-intro .apply-safety { max-width:235px; margin:0; padding:12px 0; border-top:2px solid var(--accent); color:var(--ink); font-size:13px; line-height:1.45; }
+.apply-runner-health { display:flex; align-items:center; gap:7px; margin:13px 0 0; color:var(--muted); font-size:12px; line-height:1.35; }.apply-runner-health span { width:7px; height:7px; border-radius:50%; background:var(--muted); }.apply-runner-health.online span,.apply-runner-health.working span { background:var(--accent); }.apply-runner-health.degraded,.apply-runner-health.offline { color:var(--ink); }
 .apply-target { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(260px,.75fr); gap:38px; margin-top:34px; padding:26px 29px; border-top:2px solid var(--accent); background:var(--surface); }
 .apply-target.manual-pack { border-top-color:var(--line); }.apply-target.unsupported { border-top-color:var(--accent-deep); }
 .apply-state { display:block; color:var(--accent-deep); font-family:var(--mono); font-size:11px; line-height:1.35; }

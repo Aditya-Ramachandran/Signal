@@ -253,11 +253,22 @@ create table if not exists public.application_run_events (
 create index if not exists application_run_events_request_created
   on public.application_run_events (request_id, created_at asc);
 
+-- A runner heartbeat exposes operational state only. It never stores profile,
+-- application, browser-cookie, or secret data.
+create table if not exists public.application_runner_health (
+  runner_id text primary key,
+  state text not null check (state in ('online', 'working', 'degraded', 'offline')),
+  detail jsonb not null default '{}'::jsonb,
+  last_seen_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 alter table public.application_profiles enable row level security;
 alter table public.application_resumes enable row level security;
 alter table public.application_answer_memory enable row level security;
 alter table public.application_requests enable row level security;
 alter table public.application_run_events enable row level security;
+alter table public.application_runner_health enable row level security;
 
 create policy "Users can read their own application profile"
 on public.application_profiles for select to authenticated using (user_id = auth.uid());
@@ -288,6 +299,8 @@ on public.application_requests for update to authenticated using (user_id = auth
 
 create policy "Users can read their own application run events"
 on public.application_run_events for select to authenticated using (user_id = auth.uid());
+create policy "Users can read application runner health"
+on public.application_runner_health for select to authenticated using (true);
 
 create or replace function public.enforce_application_request_insert()
 returns trigger

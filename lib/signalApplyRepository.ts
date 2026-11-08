@@ -58,6 +58,18 @@ export type ApplicationRequestRecord = {
   updatedAt: string;
 };
 
+type ApplicationRunnerHealthRow = {
+  runner_id: string;
+  state: 'online' | 'working' | 'degraded' | 'offline';
+  last_seen_at: string;
+};
+
+export type ApplicationRunnerHealth = {
+  runnerId: string;
+  state: ApplicationRunnerHealthRow['state'];
+  lastSeenAt: string;
+};
+
 function requireClient() {
   if (!supabase) throw new Error('Supabase is not configured for this build.');
   return supabase;
@@ -201,6 +213,19 @@ export async function getApplicationRequests(): Promise<ApplicationRequestRecord
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }));
+}
+
+export async function getApplicationRunnerHealth(): Promise<ApplicationRunnerHealth | null> {
+  const { data, error } = await requireClient()
+    .from('application_runner_health')
+    .select('runner_id,state,last_seen_at')
+    .order('last_seen_at', { ascending: false })
+    .limit(1)
+    .maybeSingle<ApplicationRunnerHealthRow>();
+  // The health table is introduced with the cloud-runner migration. Its absence
+  // must never block the applicant's profile or manual application pack.
+  if (error || !data) return null;
+  return { runnerId: data.runner_id, state: data.state, lastSeenAt: data.last_seen_at };
 }
 
 export function serializeValidationErrors<T>(result: ValidationResult<T>): string | null {

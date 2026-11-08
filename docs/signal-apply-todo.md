@@ -43,12 +43,13 @@ Signal Apply is an approval-gated application assistant. It may prepare direct e
 
 ## Milestone 5 — Cloud runner deployment
 
-- [ ] Provision a persistent Linux VM and encrypted browser profile.
-- [ ] Deploy the runner as a restart-safe service.
-- [ ] Configure private environment secrets outside the repository.
-- [ ] Add a secure manual-takeover path for login, OTP, and CAPTCHA.
+- [x] Add a persistent Linux VM deployment package and encrypted-volume guidance.
+- [x] Add a restart-safe Docker service.
+- [x] Keep private environment secrets outside the repository.
+- [x] Add non-sensitive runner liveness heartbeats.
+- [ ] Add a secure manual-takeover path for login, OTP, and CAPTCHA (Milestone 6, when a real browser journey exists).
 
-**Done when:** the runner can be online without the user’s desktop and Signal accurately reports its health.
+**Done when:** the runner can be online without the user’s desktop and Signal accurately reports its health. The final VM provisioning steps remain for its owner.
 
 ## Milestone 6 — Workday deterministic adapter
 

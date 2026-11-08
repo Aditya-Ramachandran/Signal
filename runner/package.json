@@ -5,7 +5,8 @@
   "scripts": {
     "health": "node src/worker.mjs health",
     "rehearse": "node src/worker.mjs rehearse",
-    "work-once": "node src/worker.mjs work-once"
+    "work-once": "node src/worker.mjs work-once",
+    "run": "node src/worker.mjs run"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",
