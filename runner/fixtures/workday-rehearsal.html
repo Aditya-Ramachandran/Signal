@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Signal Apply — fictional Workday rehearsal</title>
+    <style>
+      body { max-width: 680px; margin: 48px auto; padding: 0 24px; background: #f3f6f5; color: #172326; font: 16px/1.45 system-ui, sans-serif; }
+      form { padding: 24px; border-top: 2px solid #c43c2d; background: #e6ecea; }
+      label { display: grid; gap: 6px; margin: 16px 0; font-weight: 600; }
+      input { min-height: 42px; box-sizing: border-box; border: 1px solid #82918d; padding: 8px; font: inherit; }
+      .sensitive { padding: 14px; border-top: 1px solid #b9c6c2; color: #506164; }
+      button { min-height: 42px; padding: 0 16px; border: 0; background: #172326; color: #f3f6f5; font: inherit; }
+    </style>
+  </head>
+  <body>
+    <h1>Fictional Workday rehearsal</h1>
+    <p>This local form exists only to prove Signal Apply's safe preparation path. It cannot submit an application.</p>
+    <form id="application-form">
+      <label>Legal name <input id="candidate-name" name="legalName" data-signal-field="fullName" required /></label>
+      <label>Email address <input id="candidate-email" name="email" data-signal-field="email" type="email" required /></label>
+      <label>Phone number <input id="candidate-phone" name="phone" data-signal-field="phone" type="tel" required /></label>
+      <label>Current city <input id="candidate-location" name="location" data-signal-field="location" /></label>
+      <label>LinkedIn profile <input id="candidate-linkedin" name="linkedin" data-signal-field="linkedin" type="url" /></label>
+      <div class="sensitive" data-signal-sensitive="true">
+        Work authorization is intentionally left untouched. A real application would pause here for the applicant.
+      </div>
+      <button id="submit-application" type="submit">Submit application</button>
+    </form>
+    <script>
+      document.getElementById('application-form').addEventListener('submit', (event) => {
+        event.preventDefault();
+        document.body.dataset.submitted = 'blocked';
+      });
+    </script>
+  </body>
+</html>

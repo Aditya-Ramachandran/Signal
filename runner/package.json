@@ -1,0 +1,15 @@
+{
+  "name": "signal-apply-runner",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "health": "node src/worker.mjs health",
+    "rehearse": "node src/worker.mjs rehearse",
+    "work-once": "node src/worker.mjs work-once"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.118.0",
+    "dotenv": "^16.6.1",
+    "playwright": "^1.58.0"
+  }
+}
