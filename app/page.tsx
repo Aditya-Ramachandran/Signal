@@ -52,6 +52,17 @@ function jobContactsLink(job: Job) {
     return url.toString();
   } catch { return contactsSearchLink(job); }
 }
+function applicationSource(job: Job) {
+  const source = job.idType.toLowerCase();
+  if (source.includes('linkedin')) return 'linkedin';
+  if (source.includes('indeed')) return 'indeed';
+  if (source.includes('workday')) return 'workday';
+  return 'external';
+}
+function applicationQueueLink(job: Job) {
+  const query = new URLSearchParams({ jobId: job.id, company: job.company, role: job.role, url: job.applyLink, source: applicationSource(job) });
+  return `/apply?${query.toString()}`;
+}
 function fetchedLabel(job: Job) { return job.dateFound ? `Fetched ${job.dateFound}` : 'Fetched in the latest run'; }
 function feedLastRun(payload: BridgeResponse) { return stringValue(payload.meta?.lastRun || payload.meta?.last_run || payload.lastRun || payload.last_run); }
 
@@ -316,7 +327,7 @@ function JobActions({ job, view, saved, onCopy, onNeedName, onStatus, onSave, on
   }, []);
   const needsName = job.referralMessage.includes('{Name}');
   const copyMessage = () => { if (needsName && !contactName.trim()) { onNeedName(); return; } onCopy(job.referralMessage.replaceAll('{Name}', contactName.trim())); };
-  return <><div className="actions"><button className="btn primary" onClick={copyMessage}>Copy message</button><a className="btn" href={jobContactsLink(job)} target="_blank" rel="noreferrer" title={`Find engineering managers, tech leads, and recruiters at ${job.company}`}>Find a person</a><a className="btn" href={job.applyLink} target="_blank" rel="noreferrer">Apply ↗</a><details className="action-menu"><summary>More</summary><div><button onClick={() => onStatus(job.id, 'Applied')}>Mark as applied</button><button onClick={() => onSave(job.id)}>{saved ? 'Move to Today' : 'Save for later'}</button>{view === 'later' ? <button onClick={() => onUnsnooze(job.id)}>Bring back today</button> : <button onClick={() => onSnooze(job.id)}>Snooze until tomorrow</button>}<button onClick={() => onStatus(job.id, 'Rejected')}>Not a fit</button></div></details></div>{needsName && <label className="contact-name-input">Contact first name <input value={contactName} onChange={(event) => setContactName(event.target.value)} placeholder="e.g. Priya"/> <span>Required before copying.</span></label>}</>;
+  return <><div className="actions"><button className="btn primary" onClick={copyMessage}>Copy message</button><a className="btn" href={jobContactsLink(job)} target="_blank" rel="noreferrer" title={`Find engineering managers, tech leads, and recruiters at ${job.company}`}>Find a person</a><Link className="btn quiet" href={applicationQueueLink(job)} title="Review this role in Signal Apply before opening the application">Prepare in Signal</Link><a className="btn" href={job.applyLink} target="_blank" rel="noreferrer">Apply ↗</a><details className="action-menu"><summary>More</summary><div><button onClick={() => onStatus(job.id, 'Applied')}>Mark as applied</button><button onClick={() => onSave(job.id)}>{saved ? 'Move to Today' : 'Save for later'}</button>{view === 'later' ? <button onClick={() => onUnsnooze(job.id)}>Bring back today</button> : <button onClick={() => onSnooze(job.id)}>Snooze until tomorrow</button>}<button onClick={() => onStatus(job.id, 'Rejected')}>Not a fit</button></div></details></div>{needsName && <label className="contact-name-input">Contact first name <input value={contactName} onChange={(event) => setContactName(event.target.value)} placeholder="e.g. Priya"/> <span>Required before copying.</span></label>}</>;
 }
 
 function LeadJob({ job, view, saved, messageOpen, onReviewMessage, ...actions }: ActionsProps & { messageOpen: boolean; onReviewMessage: () => void }) { return <article className={`lead tier-${job.tier.toLowerCase()}`}><div><div className="lead-kicker">{view === 'today' ? 'Best next move' : view === 'saved' ? 'Saved role' : 'Snoozed role'} · Tier {job.tier}</div><h2>{job.role}</h2><div className="company">{job.company}</div><div className="facts lead-facts"><span>{job.location}</span><span>{job.experience}</span><span>{job.salary}</span><span>{fetchedLabel(job)}</span></div></div><div className="lead-why"><p>{job.whyFit}</p><div className="facts"><span>{job.companySize}</span><span>Listing ref. {job.jobId}</span></div></div><div className="message"><div className="message-label">Referral message · {job.jobId}</div>{messageOpen ? <p>{job.referralMessage}</p> : <p className="message-preview">A tailored referral note is ready when you need it.</p>}{!messageOpen && <button className="review-note" onClick={onReviewMessage}>Review referral note</button>}<JobActions job={job} view={view} saved={saved} {...actions}/></div></article>; }
