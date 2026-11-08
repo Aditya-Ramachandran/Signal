@@ -49,12 +49,13 @@ export default function GuidePage() {
           <p>Open the <strong>daily-backend-jobs</strong> workflow in GitHub Actions and choose <strong>Run workflow</strong>. The first run can take 10–30 minutes. When it finishes, your Sheet should have a <strong>Jobs</strong> tab with roles and referral messages.</p>
           <p>After that, the scheduled workflow runs each morning. GitHub may start it a little after the planned time.</p>
         </Step>
-        <Step number="5" emoji="👋" title="Get invited to Signal">
-          <p>Ask the Signal owner to add the exact Google email you will use to the approved-user list. Then sign in with that same account. Google gives Signal your identity only—it does not grant access to your inbox or Sheet.</p>
+        <Step number="5" emoji="👋" title="Choose your workspace">
+          <p><strong>Using someone else’s hosted Signal?</strong> Ask its owner to approve the exact Google email you will use. Google gives Signal your identity only—it does not grant access to your inbox or Sheet.</p>
+          <p><strong>Running your own Signal?</strong> Deploy your own workspace, approve your own Google account, then connect the jobs feed you created above.</p>
         </Step>
-        <Step number="6" emoji="🔗" title="Connect your read-only feed">
-          <p>In Signal, choose <strong>Connect jobs feed</strong>. Add your role preferences and paste the public read-only Apps Script <code>/exec</code> URL.</p>
-          <p>Save the workspace, then open Signal. If the feed is healthy, your Sheet’s jobs become your morning queue.</p>
+        <Step number="6" emoji="🔗" title="Connect your read-only jobs feed">
+          <p>In Signal, choose <strong>Manage jobs feed</strong>. Add your role preferences and paste the public read-only Apps Script <code>/exec</code> URL.</p>
+          <p>Save the workspace, then open your morning queue. If the feed is healthy, your Sheet’s jobs become the roles you can act on.</p>
         </Step>
       </div>
     </div>

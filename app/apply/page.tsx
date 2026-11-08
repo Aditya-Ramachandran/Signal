@@ -64,7 +64,7 @@ function routeState(target: JobApplicationTarget | null): RouteState {
 
 function statusCopy(status: ApplicationStatus): string {
   const labels: Record<ApplicationStatus, string> = {
-    draft: 'Draft', approved_to_prepare: 'Waiting for runner', waiting_for_runner: 'Waiting for runner', running: 'Preparing', needs_you: 'Needs you', ready_to_submit: 'Ready for final approval', submit_approved: 'Submitting', submitted: 'Submitted', failed: 'Needs attention', cancelled: 'Cancelled',
+    draft: 'Draft', approved_to_prepare: 'Preparation approved', waiting_for_runner: 'Preparation queued', running: 'Preparing securely', needs_you: 'Needs your review', ready_to_submit: 'Ready for your final approval', submit_approved: 'Final approval given', submitted: 'Application marked sent', failed: 'Needs attention', cancelled: 'Cancelled',
   };
   return labels[status];
 }
@@ -86,6 +86,11 @@ export default function ApplyPage() {
   const state = routeState(target);
   const selectedResume = resumes.find((resume) => resume.id === selectedResumeId) ?? null;
   const existingForTarget = useMemo(() => target ? requests.find((request) => request.jobId === target.jobId && !['failed', 'cancelled'].includes(request.status)) : undefined, [requests, target]);
+  const missingProfileFields = profile ? [
+    !profile.contact.fullName?.trim() ? 'full name' : '',
+    !profile.contact.email?.trim() ? 'email' : '',
+    !profile.contact.phone?.trim() ? 'phone number' : '',
+  ].filter(Boolean) : [];
 
   const refreshWorkspace = async (id: string) => {
     const [savedProfile, savedResumes, savedRequests] = await Promise.all([getApplicationProfile(id), getResumes(id), getApplicationRequests()]);
@@ -170,7 +175,7 @@ export default function ApplyPage() {
       const requestId = await createApplicationDraft(draft.value);
       if (state === 'agent-ready') {
         await approveApplicationPreparation(requestId);
-        setMessage('Preparation approved. Signal will wait for its runner—nothing will submit without a separate final approval.');
+        setMessage('Preparation approved. It is saved for secure preparation; nothing will submit without a separate final approval.');
       } else {
         setMessage('Manual application pack saved. Open the official application when you are ready to complete it yourself.');
       }
@@ -193,24 +198,24 @@ export default function ApplyPage() {
     {loadState === 'error' && <section className="apply-empty"><h1>Your Apply workspace needs attention.</h1><p>{message}</p><Link className="btn primary" href="/">Back to Signal</Link></section>}
     {loadState === 'ready' && profile && <>
       <section className="apply-intro">
-        <div><h1>Apply with intent.</h1><p>Review what Signal can prepare before any browser ever touches an application. You always make the final submit decision.</p></div>
+        <div><h1>{target ? 'Prepare this application.' : 'Prepare the right application.'}</h1><p>{target ? 'Review this role, choose your materials, and keep the final decision with you.' : 'Choose a role from your morning queue, then prepare one clear next step.'}</p></div>
         <p className="apply-safety">No auto-submit. No CAPTCHA bypass. Sensitive answers stay with you.</p>
       </section>
 
-      {!target ? <section className="apply-empty"><h2>Choose a role first.</h2><p>From your Signal queue, open a role and choose <strong>Prepare in Signal</strong>. We will bring its application link here.</p><Link className="btn primary" href="/">Open your queue</Link></section> : <>
+      {!target ? <section className="apply-empty"><h2>Choose a role first.</h2><p>From your morning queue, open a role and choose <strong>Prepare application</strong>. Signal will bring its application link and context here.</p><Link className="btn primary" href="/">Open your queue</Link></section> : <>
         <section className={`apply-target ${state}`}>
-          <div><span className="apply-state">{state === 'agent-ready' ? 'Agent-ready · Workday' : state === 'manual-pack' ? 'Manual application pack' : 'Unsupported application link'}</span><h2>{target.role}</h2><p>{target.company}</p></div>
-          <div className="apply-target-detail"><strong>{state === 'agent-ready' ? 'Ready to prepare' : state === 'manual-pack' ? 'You will finish this one yourself' : 'Needs a valid application link'}</strong><span>{state === 'agent-ready' ? 'Signal will prepare only reviewed information, then stop for final approval.' : state === 'manual-pack' ? 'Signal saves your chosen resume and profile snapshot; it does not automate LinkedIn or Indeed.' : 'Return to the queue and use a role with a valid employer application URL.'}</span></div>
+          <div><span className="apply-state">{state === 'agent-ready' ? 'Ready to prepare · Workday' : state === 'manual-pack' ? 'Prepare your details' : 'Unsupported application link'}</span><h2>{target.role}</h2><p>{target.company}</p></div>
+          <div className="apply-target-detail"><strong>{state === 'agent-ready' ? 'Your approval prepares this role' : state === 'manual-pack' ? 'You will complete this application yourself' : 'Needs a valid application link'}</strong><span>{state === 'agent-ready' ? 'Signal uses only the materials you review, then stops before final submission.' : state === 'manual-pack' ? 'Signal saves your selected details so you can complete the official application yourself.' : 'Return to the queue and use a role with a valid employer application URL.'}</span></div>
         </section>
 
-        {existingForTarget ? <section className="apply-existing"><span className="apply-state">{statusCopy(existingForTarget.status)}</span><h2>This application is already in your queue.</h2><p>{existingForTarget.status === 'approved_to_prepare' ? 'Your preparation approval is saved. The cloud runner arrives in the next milestone; it cannot submit anything yet.' : 'Review its live status below. Signal will never create a duplicate request for this role.'}</p></section> : <section className="apply-approval">
-          <div className="apply-approval-copy"><h2>{state === 'agent-ready' ? 'Approve preparation' : 'Save a manual application pack'}</h2><p>{state === 'agent-ready' ? 'This freezes the profile and resume shown here for this role. It does not open, fill, or submit the form yet.' : 'This preserves the profile and resume you chose, so you can open the official application with your details ready.'}</p></div>
-          <div className="apply-choice"><label htmlFor="resume-select">Resume for this role</label><select id="resume-select" value={selectedResumeId} onChange={(event) => setSelectedResumeId(event.target.value)}><option value="">No resume attached</option>{resumes.map((resume) => <option key={resume.id} value={resume.id}>{resume.fileName}{resume.isActive ? ' · active' : ''}</option>)}</select><button className="btn primary" disabled={state === 'unsupported' || creatingRequest} onClick={createRequest}>{creatingRequest ? 'Saving…' : state === 'agent-ready' ? 'Approve preparation' : 'Save application pack'}</button></div>
+        {existingForTarget ? <section className="apply-existing"><span className="apply-state">{statusCopy(existingForTarget.status)}</span><h2>This application is already being tracked.</h2><p>{existingForTarget.status === 'approved_to_prepare' ? 'Your approval is saved. Signal will show preparation progress here when it begins.' : 'Review this role’s saved status below. Signal will not create a duplicate request.'}</p></section> : <section className="apply-approval">
+          <div className="apply-approval-copy"><h2>{state === 'agent-ready' ? 'Approve preparation' : 'Save your details'}</h2><p>{missingProfileFields.length ? `Add your ${missingProfileFields.join(', ')} in Application materials below before continuing.` : state === 'agent-ready' ? 'This freezes the reviewed profile and selected resume for this role. It does not submit an application.' : 'This preserves the selected details for this role; you will complete the official application yourself.'}</p></div>
+          <div className="apply-choice"><label htmlFor="resume-select">Resume for this role <span>optional</span></label><select id="resume-select" value={selectedResumeId} onChange={(event) => setSelectedResumeId(event.target.value)}><option value="">No resume attached</option>{resumes.map((resume) => <option key={resume.id} value={resume.id}>{resume.fileName}{resume.isActive ? ' · active' : ''}</option>)}</select><button className="btn primary" disabled={state === 'unsupported' || creatingRequest || Boolean(missingProfileFields.length)} onClick={createRequest}>{creatingRequest ? 'Saving…' : state === 'agent-ready' ? 'Approve preparation' : 'Save details'}</button></div>
         </section>}
-      </>}
-
-      <section className="apply-profile-section">
-        <div className="apply-section-heading"><h2>Your application profile</h2><p>Signal needs these basics to freeze an accurate application packet. Sensitive, legal, and demographic answers are deliberately not stored here.</p></div>
+      <details className="apply-materials" open={Boolean(missingProfileFields.length)}>
+        <summary>Application materials <span>{missingProfileFields.length ? `Needs ${missingProfileFields.join(', ')}` : 'Profile and resume'}</span></summary>
+        <div className="apply-profile-section">
+        <div className="apply-section-heading"><h2>Details for this application</h2><p>Signal stores only the basics needed to prepare this role. Sensitive, legal, and demographic answers stay with you.</p></div>
         <form className="apply-profile-form" onSubmit={saveProfile}>
           <label>Full name<input value={profile.contact.fullName ?? ''} onChange={(event) => updateContact('fullName', event.target.value)} autoComplete="name"/></label>
           <label>Email<input type="email" value={profile.contact.email ?? ''} onChange={(event) => updateContact('email', event.target.value)} autoComplete="email"/></label>
@@ -220,18 +225,17 @@ export default function ApplyPage() {
           <label>Portfolio or GitHub <span>optional</span><input type="url" value={profile.links.portfolio || profile.links.github || ''} onChange={(event) => updateLink('portfolio', event.target.value)} placeholder="https://..."/></label>
           <div className="apply-form-actions"><button className="btn" type="submit" disabled={savingProfile}>{savingProfile ? 'Saving…' : 'Save profile'}</button>{profile.updatedAt && <span className="apply-saved">Profile version {profile.version} saved</span>}</div>
         </form>
-      </section>
+        </div>
 
-      <section className="apply-resumes">
-        <div className="apply-section-heading"><h2>Your resumes</h2><p>Upload a PDF, DOC, or DOCX up to 10 MB. Your newest upload becomes your active resume.</p></div>
+      <div className="apply-resumes">
+        <div className="apply-section-heading"><h2>Resume options</h2><p>Upload a PDF, DOC, or DOCX up to 10 MB. You choose one only when a role needs it.</p></div>
         <label className="apply-upload"><span>{uploadingResume ? 'Uploading resume…' : 'Upload a resume'}</span><input type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" disabled={uploadingResume} onChange={addResume}/></label>
         {resumes.length ? <ul className="apply-resume-list">{resumes.map((resume) => <li key={resume.id}><span>{resume.fileName}</span>{resume.isActive && <strong>Active</strong>}</li>)}</ul> : <p className="apply-empty-copy">No resume uploaded yet. You can still make a request, but Workday preparation will stop when a resume is required.</p>}
-      </section>
+      </div>
+      </details>
 
-      <section className="apply-history" aria-live="polite">
-        <div className="apply-section-heading"><h2>Application activity</h2><p>These are real saved requests. Runner activity will appear here once the secure runner exists.</p></div>
-        {requests.length ? <ul>{requests.map((request) => <li key={request.id}><div><span className="apply-state">{statusCopy(request.status)}</span><strong>{request.jobSnapshot.role}</strong><span>{request.jobSnapshot.company} · {request.mode === 'agent' ? 'Workday agent' : 'Manual pack'}</span></div><time dateTime={request.updatedAt}>{new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }).format(new Date(request.updatedAt))}</time></li>)}</ul> : <p className="apply-empty-copy">Nothing approved yet. Your first request will appear here.</p>}
-      </section>
+      {existingForTarget && <details className="apply-materials apply-activity" open><summary>Preparation status <span>{statusCopy(existingForTarget.status)}</span></summary><div className="apply-history" aria-live="polite"><div className="apply-section-heading"><h2>This role’s activity</h2><p>Only this role’s saved status is shown here.</p></div><ul>{[existingForTarget].map((request) => <li key={request.id}><div><span className="apply-state">{statusCopy(request.status)}</span><strong>{request.jobSnapshot.role}</strong><span>{request.jobSnapshot.company} · {request.mode === 'agent' ? 'Prepared with Signal' : 'Prepared details'}</span></div><time dateTime={request.updatedAt}>{new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }).format(new Date(request.updatedAt))}</time></li>)}</ul></div></details>}
+      </>}
       {message && <div className="apply-toast" role="status">{message}</div>}
     </>}
     <SignalFooter/>
