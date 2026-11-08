@@ -124,7 +124,10 @@ function isHttpUrl(value: string): boolean {
 }
 
 function isWorkdayHost(host: string): boolean {
-  return host === 'workdayjobs.com' || host.endsWith('.workdayjobs.com');
+  return host === 'workdayjobs.com'
+    || host.endsWith('.workdayjobs.com')
+    || host === 'myworkdayjobs.com'
+    || host.endsWith('.myworkdayjobs.com');
 }
 
 function isLinkedInHost(host: string): boolean {

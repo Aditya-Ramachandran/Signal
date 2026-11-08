@@ -5,7 +5,7 @@ import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from 'react';
 import SignalFooter from '../components/SignalFooter';
 import SignalMark from '../components/SignalMark';
 import { supabase } from '../../lib/supabase';
-import { createApplicationRequestDraft, type ApplicationProfile, type ApplicationStatus, type JobApplicationTarget, type ResumeRecord } from '../../lib/signalApply';
+import { classifyApplicationRoute, createApplicationRequestDraft, type ApplicationProfile, type ApplicationStatus, type JobApplicationTarget, type ResumeRecord } from '../../lib/signalApply';
 import {
   approveApplicationPreparation,
   createApplicationDraft,
@@ -52,14 +52,12 @@ function blankProfile(userId: string, email = ''): ApplicationProfile {
 
 function routeState(target: JobApplicationTarget | null): RouteState {
   if (!target) return 'unsupported';
-  try {
-    const host = new URL(target.applicationUrl).hostname.toLowerCase();
-    if (host === 'workdayjobs.com' || host.endsWith('.workdayjobs.com')) return 'agent-ready';
-    if (host === 'linkedin.com' || host.endsWith('.linkedin.com') || host === 'indeed.com' || host.endsWith('.indeed.com')) return 'manual-pack';
-    return 'manual-pack';
-  } catch {
-    return 'unsupported';
-  }
+  const route = classifyApplicationRoute(target.applicationUrl);
+  return route.platform === 'workday' && route.mode === 'agent'
+    ? 'agent-ready'
+    : route.destinationHost
+      ? 'manual-pack'
+      : 'unsupported';
 }
 
 function statusCopy(status: ApplicationStatus): string {
