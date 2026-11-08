@@ -5,7 +5,7 @@ import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from 'react';
 import SignalFooter from '../components/SignalFooter';
 import SignalMark from '../components/SignalMark';
 import { supabase } from '../../lib/supabase';
-import { classifyApplicationRoute, createApplicationRequestDraft, type ApplicationProfile, type ApplicationStatus, type JobApplicationTarget, type ResumeRecord } from '../../lib/signalApply';
+import { classifyApplicationRoute, createApplicationRequestDraft, isHttpUrl, type ApplicationProfile, type ApplicationStatus, type JobApplicationTarget, type ResumeRecord } from '../../lib/signalApply';
 import {
   approveApplicationPreparation,
   createApplicationDraft,
@@ -27,7 +27,7 @@ function targetFromSearch(): JobApplicationTarget | null {
   const role = params.get('role')?.trim();
   const applicationUrl = params.get('url')?.trim();
   const source = params.get('source');
-  if (!jobId || !company || !role || !applicationUrl) return null;
+  if (!jobId || !company || !role || !applicationUrl || !isHttpUrl(applicationUrl)) return null;
   return {
     jobId,
     company,
@@ -211,9 +211,9 @@ export default function ApplyPage() {
           <div className="apply-choice"><label htmlFor="resume-select">Resume for this role <span>optional</span></label><select id="resume-select" value={selectedResumeId} onChange={(event) => setSelectedResumeId(event.target.value)}><option value="">No resume attached</option>{resumes.map((resume) => <option key={resume.id} value={resume.id}>{resume.fileName}{resume.isActive ? ' · active' : ''}</option>)}</select><button className="btn primary" disabled={state === 'unsupported' || creatingRequest || Boolean(missingProfileFields.length)} onClick={createRequest}>{creatingRequest ? 'Saving…' : state === 'agent-ready' ? 'Approve rehearsal' : 'Save details'}</button></div>
         </section>}
       <details className="apply-materials" open={Boolean(missingProfileFields.length)}>
-        <summary>Application materials <span>{missingProfileFields.length ? `Needs ${missingProfileFields.join(', ')}` : 'Profile and resume'}</span></summary>
+        <summary>Contact details and resume <span>{missingProfileFields.length ? `Needs ${missingProfileFields.join(', ')}` : 'Ready to review'}</span></summary>
         <div className="apply-profile-section">
-        <div className="apply-section-heading"><h2>Details for this application</h2><p>Signal stores only the basics needed to prepare this role. Sensitive, legal, and demographic answers stay with you.</p></div>
+        <div className="apply-section-heading"><h2>Contact details for this role</h2><p>Signal stores only the basics currently used in a preparation packet. Sensitive, legal, and demographic answers stay with you.</p></div>
         <form className="apply-profile-form" onSubmit={saveProfile}>
           <label>Full name<input value={profile.contact.fullName ?? ''} onChange={(event) => updateContact('fullName', event.target.value)} autoComplete="name"/></label>
           <label>Email<input type="email" value={profile.contact.email ?? ''} onChange={(event) => updateContact('email', event.target.value)} autoComplete="email"/></label>

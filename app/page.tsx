@@ -30,6 +30,14 @@ function readJson<T>(key: string, fallback: T): T {
 function withSavedStatuses(items: Job[], statuses = readJson<StoredStatuses>(STATUS_STORAGE_KEY, {})) { return items.map((job) => statuses[job.id] ? { ...job, status: statuses[job.id] } : job); }
 function isAccountRoute() { return typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('app'); }
 function stringValue(value: unknown, fallback = '') { return typeof value === 'string' || typeof value === 'number' ? String(value).trim() || fallback : fallback; }
+function isSafeHttpUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' || url.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
 function field(row: Record<string, unknown>, ...names: string[]) { const match = Object.entries(row).find(([key]) => names.some((name) => key.toLowerCase() === name.toLowerCase())); return match ? stringValue(match[1]) : ''; }
 function formatDate(value: string) {
   const date = new Date(value.includes('T') ? value : `${value}T00:00:00`);
@@ -76,7 +84,12 @@ function jobsFromBridge(payload: BridgeResponse): Job[] {
     const status: Job['status'] = ['New', 'Applied', 'Referred', 'Rejected'].includes(rawStatus) ? rawStatus as Job['status'] : 'New';
     const tier: Job['tier'] = field(row, 'Tier', 'tier').toUpperCase() === 'A' ? 'A' : 'B';
     const listingUrl = field(row, 'Listing URL', 'Listing Link', 'Link', 'listingUrl');
-    const applicationUrl = field(row, 'Application URL', 'Application Link', 'Apply Link', 'applyLink') || listingUrl || '#';
+    const directApplicationUrl = field(row, 'Application URL', 'Application Link', 'Apply Link', 'applyLink');
+    const applicationUrl = isSafeHttpUrl(directApplicationUrl)
+      ? directApplicationUrl
+      : isSafeHttpUrl(listingUrl)
+        ? listingUrl
+        : '';
     const jobId = field(row, 'Job ID', 'jobId') || `live-${index + 1}`;
     return {
       id: jobId, company, role,

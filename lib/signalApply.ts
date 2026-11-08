@@ -114,7 +114,7 @@ function cleanText(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function isHttpUrl(value: string): boolean {
+export function isHttpUrl(value: string): boolean {
   try {
     const url = new URL(value);
     return url.protocol === 'https:' || url.protocol === 'http:';
@@ -142,7 +142,9 @@ export function classifyApplicationRoute(applicationUrl: string): ApplicationRou
   if (!isHttpUrl(applicationUrl)) return { platform: 'external', mode: 'manual_pack', destinationHost: null };
 
   const host = new URL(applicationUrl).hostname.toLowerCase();
-  if (isWorkdayHost(host)) return { platform: 'workday', mode: 'agent', destinationHost: host };
+  // The current runner is a fixture-only safety rehearsal. A direct Workday
+  // link remains manual until the real Workday adapter can inspect that page.
+  if (isWorkdayHost(host)) return { platform: 'workday', mode: 'manual_pack', destinationHost: host };
   if (isLinkedInHost(host)) return { platform: 'linkedin_easy_apply', mode: 'manual_pack', destinationHost: host };
   if (isIndeedHost(host)) return { platform: 'indeed_apply', mode: 'manual_pack', destinationHost: host };
   return { platform: 'external', mode: 'manual_pack', destinationHost: host };

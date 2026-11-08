@@ -145,25 +145,13 @@ export async function uploadApplicationResume(userId: string, file: File): Promi
   const { error: uploadError } = await client.storage.from('application-resumes').upload(storagePath, file, { contentType: file.type || undefined, upsert: false });
   if (uploadError) throw uploadError;
 
-  const { data: existing, error: existingError } = await client
-    .from('application_resumes')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('is_active', true)
-    .maybeSingle<{ id: string }>();
-  if (existingError) throw existingError;
-  if (existing) {
-    const { error: deactivateError } = await client
-      .from('application_resumes')
-      .update({ is_active: false })
-      .eq('id', existing.id);
-    if (deactivateError) throw deactivateError;
-  }
-
   const { data, error } = await client
-    .from('application_resumes')
-    .insert({ user_id: userId, storage_path: storagePath, file_name: file.name, content_type: file.type || null, byte_size: file.size, is_active: true })
-    .select()
+    .rpc('activate_application_resume', {
+      p_storage_path: storagePath,
+      p_file_name: file.name,
+      p_content_type: file.type || null,
+      p_byte_size: file.size,
+    })
     .single<ResumeRow>();
   if (error) {
     await client.storage.from('application-resumes').remove([storagePath]);
