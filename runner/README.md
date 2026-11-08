@@ -10,7 +10,7 @@ This is a local safety rehearsal, not a real application bot.
 ## Local rehearsal
 
 1. Apply the latest `supabase/schema.sql` in the Supabase SQL editor.
-2. Copy `.env.example` to `.env` inside this folder and add the project URL plus **service-role** key. Never put this key in the frontend or commit it.
+2. Copy `.env.example` to `.env` inside this folder and add the project URL plus Supabase **Secret key** (`sb_secret_...`). Never put this key in the frontend or commit it.
 3. From `runner/`, install dependencies and Chromium:
 
    ```bash

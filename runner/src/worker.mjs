@@ -4,7 +4,7 @@ import { runnerConfig } from './config.mjs';
 import { prepareFictionalWorkday } from './rehearsal.mjs';
 
 function clientFor(config) {
-  return createClient(config.supabaseUrl, config.serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } });
+  return createClient(config.supabaseUrl, config.secretKey, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
 async function audit(client, request, eventType, detail) {

@@ -1,4 +1,4 @@
-const required = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'];
+const required = ['SUPABASE_URL', 'SUPABASE_SECRET_KEY'];
 
 export function runnerConfig(env = process.env, { needsSupabase = true } = {}) {
   const missing = required.filter((name) => !env[name]?.trim());
@@ -10,7 +10,7 @@ export function runnerConfig(env = process.env, { needsSupabase = true } = {}) {
 
   return {
     supabaseUrl: env.SUPABASE_URL || '',
-    serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY || '',
+    secretKey: env.SUPABASE_SECRET_KEY || '',
     runnerId: env.SIGNAL_RUNNER_ID?.trim() || 'local-rehearsal',
     maxSteps,
     headless: env.RUNNER_HEADLESS !== 'false',
