@@ -65,7 +65,6 @@ function applicationQueueLink(job: Job) {
 }
 function fetchedLabel(job: Job) { return job.dateFound ? `Fetched ${job.dateFound}` : 'Fetched in the latest run'; }
 function feedLastRun(payload: BridgeResponse) { return stringValue(payload.meta?.lastRun || payload.meta?.last_run || payload.lastRun || payload.last_run); }
-
 function jobsFromBridge(payload: BridgeResponse): Job[] {
   if (!payload.ok || !Array.isArray(payload.jobs)) return [];
   return payload.jobs.map((row, index) => {
@@ -140,6 +139,7 @@ function Dashboard() {
   const [progressUserId, setProgressUserId] = useState('');
   const [progressScope, setProgressScope] = useState<'device' | 'account'>('device');
   const [accountEmail, setAccountEmail] = useState('');
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [feedHealth, setFeedHealth] = useState<FeedHealth>({ state: 'checking', jobCount: 0, lastRun: '' });
   const reducedMotion = useReducedMotion();
 
@@ -235,7 +235,8 @@ function Dashboard() {
   };
   useEffect(() => { if (routeReady && !isGuestDemo && workspaceStatus === 'ready' && jobsFeedUrl) void loadLiveJobs(); }, [isGuestDemo, jobsFeedUrl, routeReady, workspaceStatus]);
 
-  const workspaceJobs = workspaceStatus === 'ready' ? jobState : [];
+  // Do not briefly present sample roles as private account data while a feed loads.
+  const workspaceJobs = workspaceStatus === 'ready' && (isGuestDemo || liveJobsLoaded) ? jobState : [];
   const actionQueue = useMemo(() => workspaceJobs.filter((job) => job.status !== 'Rejected' && !jobMeta[job.id]?.saved && !isSnoozed(jobMeta[job.id])), [jobMeta, workspaceJobs]);
   const todayJobs = useMemo(() => actionQueue.filter((job) => job.status === 'New'), [actionQueue]);
   const appliedJobs = useMemo(() => actionQueue.filter((job) => job.status === 'Applied'), [actionQueue]);
@@ -282,7 +283,17 @@ function Dashboard() {
   };
   const copy = async (text: string) => { try { await navigator.clipboard.writeText(text); announce('Message copied'); } catch { announce('Copy unavailable — select the message manually'); } };
   const reviewLeadMessage = () => { setLeadMessageOpen(true); window.localStorage.setItem(LEAD_REVIEWED_KEY, 'true'); };
-  const refresh = async () => { if (isGuestDemo) { announce('Demo queue refreshed'); return; } if (workspaceStatus !== 'ready') { announce('Finish your workspace setup before refreshing.'); return; } if (await loadLiveJobs()) announce('Queue refreshed from your tracker'); };
+  const refresh = async () => {
+    if (isRefreshing) return;
+    if (isGuestDemo) { announce('Demo queue refreshed'); return; }
+    if (workspaceStatus !== 'ready') { announce('Finish your workspace setup before refreshing.'); return; }
+    setIsRefreshing(true);
+    try {
+      if (await loadLiveJobs()) announce('Queue refreshed from your tracker');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
   const signOut = async () => { await supabase?.auth.signOut(); const basePath = window.location.hostname.endsWith('github.io') ? '/Signal/' : '/'; window.location.assign(basePath); };
   const moveToWorkspace = () => { window.requestAnimationFrame(() => document.getElementById('workspace-content')?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' })); };
   const chooseView = (view: View) => { setActiveView(view); setFilter('All'); setExpandedId(null); moveToWorkspace(); };
