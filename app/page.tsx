@@ -171,6 +171,19 @@ function Dashboard() {
     return () => window.removeEventListener('signal-application-opened', restore);
   }, []);
   useEffect(() => {
+    if (isGuestDemo) return;
+    const rememberExternalApplication = (event: MouseEvent) => {
+      const link = (event.target as HTMLElement).closest<HTMLAnchorElement>('a[href]');
+      if (!link) return;
+      const job = jobState.find((item) => item.applyLink === link.href);
+      if (!job) return;
+      window.localStorage.setItem(APPLICATION_RETURN_KEY, job.id);
+      setApplicationReturnId(job.id);
+    };
+    document.addEventListener('click', rememberExternalApplication);
+    return () => document.removeEventListener('click', rememberExternalApplication);
+  }, [isGuestDemo, jobState]);
+  useEffect(() => {
     if (isGuestDemo || !supabase) return;
     let cancelled = false;
     void supabase.auth.getUser().then(({ data }) => { if (!cancelled) setAccountEmail(data.user?.email || ''); });
@@ -337,6 +350,7 @@ function Dashboard() {
   return <main className="shell">
     <header className="masthead"><div className="brand"><SignalMark/><div><div className="wordmark">Signal</div><div className="tagline">Less noise. More signal.</div></div></div><div className="mast-actions"><button className="theme-toggle" aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}><span aria-hidden="true">{theme === 'dark' ? '☀️' : '🌙'}</span></button><button className="refresh" onClick={refresh}>Refresh queue</button>{!isGuestDemo && <details className="account-menu"><summary aria-label={accountEmail ? `Account menu for ${accountEmail}` : 'Open account menu'} title={accountEmail ? `Account: ${accountEmail}` : 'Open account menu'}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M4.75 20c.85-4 3.23-6 7.25-6s6.4 2 7.25 6"/></svg></summary><div className="account-menu-panel"><span className="account-menu-label">Private workspace</span><span className="account-menu-email" title={accountEmail}>{accountEmail || 'Your account'}</span><button onClick={signOut}>Sign out</button></div></details>}</div></header>
     <MobileDesktopNote/>
+    {!isGuestDemo && returnedApplication && <aside className="application-return" role="status"><div><strong>Back from applying to {returnedApplication.role}?</strong><span>{returnedApplication.company} · Signal never assumes an application was submitted.</span></div><div><button type="button" className="btn primary" onClick={() => setStatus(returnedApplication.id, 'Applied')}>Mark as applied</button><button type="button" className="text-action" onClick={() => { window.localStorage.removeItem(APPLICATION_RETURN_KEY); setApplicationReturnId(''); }}>Not yet</button></div></aside>}
     {isGuestDemo && <aside className="guest-notice"><div><span className="mono">GUEST DEMO</span><strong>Sample roles, real workflow — nothing is sent.</strong></div><a href="https://github.com/Aditya-Ramachandran/Signal" target="_blank" rel="noreferrer">Liked this? Set up your own Signal ↗</a></aside>}
     <motion.section className="stats" aria-label="Queue summary" {...(reducedMotion ? {} : { initial: { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0 }, transition: { delay: .08, duration: .35 } })}><Stat value={String(workspaceJobs.length)} label="total roles"/><Stat value={String(todayJobs.filter((job) => job.tier === 'A').length)} label="worth a referral"/><Stat value={feedHealth.state === 'checking' ? '…' : feedHealth.state === 'healthy' ? 'Live' : feedHealth.state === 'demo' ? 'Demo' : 'Check'} label={feedHealth.state === 'checking' ? 'checking feed' : feedHealth.state === 'healthy' ? 'feed connected' : feedHealth.state === 'demo' ? 'sample queue' : 'feed unavailable'}/></motion.section>
     {(isGuestDemo || workspaceStatus === 'ready') && <div className={`feed-health ${feedHealth.state}`} role="status"><span aria-hidden="true"/><p>{feedHealth.state === 'checking' ? 'Checking your jobs feed…' : feedHealth.state === 'healthy' ? <>Feed healthy · {feedHealth.jobCount} roles loaded{feedHealth.lastRun ? <> · last run {feedHealth.lastRun}</> : null}</> : feedHealth.state === 'demo' ? `Demo feed · ${feedHealth.jobCount} sample roles` : 'Feed unavailable · Check the setup guide, then refresh.'}</p></div>}
