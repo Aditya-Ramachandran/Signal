@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from 'framer-motion';
 import { jobs as initialJobs, outreachContacts, type Job } from '../lib/sampleData';
@@ -155,7 +155,6 @@ function Dashboard() {
   const [accountEmail, setAccountEmail] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [applicationReturnId, setApplicationReturnId] = useState('');
-  const queueHeadingRef = useRef<HTMLHeadingElement>(null);
   const [feedHealth, setFeedHealth] = useState<FeedHealth>({ state: 'checking', jobCount: 0, lastRun: '' });
   const reducedMotion = useReducedMotion();
 
@@ -279,7 +278,13 @@ function Dashboard() {
   const queueSize = actionQueue.length;
   const actionedRoles = actionQueue.filter((job) => job.status !== 'New' || jobMeta[job.id]?.saved || isSnoozed(jobMeta[job.id])).length;
   const returnedApplication = workspaceJobs.find((job) => job.id === applicationReturnId && job.status === 'New');
-  const restoreQueueFocus = () => window.setTimeout(() => queueHeadingRef.current?.focus(), 0);
+  const restoreQueueFocus = () => window.setTimeout(() => {
+    const heading = document.querySelector<HTMLElement>('#workspace-content .section-head h2');
+    if (!heading) return;
+    heading.tabIndex = -1;
+    heading.focus();
+    heading.addEventListener('blur', () => heading.removeAttribute('tabindex'), { once: true });
+  }, 0);
 
   const setStatus = (id: string, status: Job['status']) => {
     const previous = jobState.find((job) => job.id === id)?.status || 'New';
